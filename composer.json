@@ -5,7 +5,10 @@
   "homepage":    "https://github.com/Tabula17/satelles-omnia-roga",
   "keywords":    ["db", "pdo", "sql", "querybuilder"],
   "authors": [
-    {"name": "Martín Emilio Panizzo"}
+    {
+      "name": "Martín Panizzo",
+      "email": "code.tabula17@gmail.com.com"
+    }
   ],
   "extra": {
     "branch-alias": {
@@ -18,10 +21,12 @@
     }
   },
   "repositories": [
-    {"type": "composer", "url": "https://tabula17.repo.repman.io"}
+    {
+      "type": "composer",
+      "url": "https://tabula17.repo.repman.io"
+    }
   ],
   "minimum-stability": "dev",
-  "prefer-stable": true,
   "require": {
     "php": ">=8.4",
     "ext-zip": "*",
