@@ -1,0 +1,50 @@
+
+<statements>
+    <statement server="sql">
+        <type>exec</type>
+        <metadata>
+            <connection>sql1</connection>
+            <operation>execute</operation>
+            <allowed>1</allowed>
+            <allowed>2</allowed>
+            <version>1.2</version>
+        </metadata>
+        <procedure>dbo</procedure>
+        <procedure>Stored_Procedure</procedure>
+        <arguments>
+            <argument>
+                <name>param_name_to_bind_01</name>
+                <type>int</type>
+                <required>1</required>
+                <paramName>param_01</paramName>
+            </argument>
+            <argument>
+                <name>param_name_to_bind_02</name>
+                <type>int</type>
+                <required>1</required>
+                <paramName>param_02</paramName>
+            </argument>
+            <argument>
+                <name>param_name_to_bind_03</name>
+                <type>int</type>
+                <required>1</required>
+                <paramName>param_03</paramName>
+            </argument>
+            <argument>
+                <name>param_name_to_bind_04</name>
+                <type>string</type>
+                <paramName>param_04</paramName>
+            </argument>
+            <argument>
+                <name>param_name_to_bind_05</name>
+                <type>int</type>
+                <paramName>param_05</paramName>
+            </argument>
+            <argument>
+                <name>param_name_to_bind_06</name>
+                <type>string</type>
+                <paramName>param_06</paramName>
+            </argument>
+        </arguments>
+    </statement>
+</statements>

@@ -1,0 +1,45 @@
+{
+  "name": "xvii/satelles-omnia-roga",
+  "description": "Generador de consultas SQL.",
+  "license":     "MIT",
+  "homepage":    "https://github.com/Tabula17/satelles-omnia-roga",
+  "keywords":    ["db", "pdo", "sql", "querybuilder"],
+  "authors": [
+    {"name": "Martín Emilio Panizzo"}
+  ],
+  "extra": {
+    "branch-alias": {
+      "dev-main": "1.0.x-dev"
+    }
+  },
+  "autoload": {
+    "psr-4": {
+      "Tabula17\\Satelles\\Omnia\\Roga\\": "src/"
+    }
+  },
+  "repositories": [
+    {"type": "composer", "url": "https://tabula17.repo.repman.io"}
+  ],
+  "minimum-stability": "dev",
+  "prefer-stable": true,
+  "require": {
+    "php": ">=8.4",
+    "ext-zip": "*",
+    "ext-fileinfo": "*",
+    "ext-swoole": ">=5.0",
+    "ext-dom": "*",
+    "ext-simplexml": "*",
+    "ext-pdo": "*",
+    "xvii/satelles-utilis-proelio": "^1.0@dev",
+    "monolog/monolog": "^3.9",
+    "utopia-php/mongo": "^0.11.0",
+    "bramus/monolog-colored-line-formatter": "^3.1"
+  },
+  "require-dev": {
+    "swoole/ide-helper": "@dev"
+  },
+  "suggest": {
+    "ext-redis": "Redis extension for caching",
+    "ext-memcached": "Memcached extension for caching"
+  }
+}

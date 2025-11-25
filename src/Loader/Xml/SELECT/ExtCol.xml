@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    * Creado por el Dpto. de Sistemas Papelera Tucumán - Grupo Telecentro.
+    * Parte de SIG-Library
+    * <| Producto.xml |>
+    * Author: marpan
+    * Date: 18/11/14
+    * Time: 15:48
+     /* The query types. */
+        const SELECT = 0;
+        const DELETE = 1;
+        const UPDATE = 2;
+        const SP = 3;
+        const SP_WITH_RESULTS = 4;
+        const INSERT = 5;
+        const UNION = 6;
+        const ORA_FUNC = 7;
+-->
+<statements>
+    <statement server="sql">
+        <type>select</type>
+        <metadata>
+            <connection>sql1</connection>
+            <operation>select</operation>
+            <allowed>1</allowed>
+            <allowed>2</allowed>
+            <version>1.2</version>
+        </metadata>
+        <from>
+            <table>dbo.productos</table>
+            <alias>p</alias>
+            <quote>1</quote>
+            <columns>
+                <column>
+                    <name>ID_Producto</name>
+                    <alias>id_producto</alias>
+                    <type>string</type>
+                    <conditions>
+                        <condition>
+                            <name>idProducto</name>
+                            <type>string</type>
+                            <sqlexpression>eq</sqlexpression>
+                        </condition>
+                        <condition>
+                            <name>idsProducto</name>
+                            <type>array_str</type>
+                            <sqlexpression>in</sqlexpression>
+                        </condition>
+                    </conditions>
+                </column>
+                <column>
+                    <name>Cod_Papel</name>
+                    <alias>cod_papel</alias>
+                    <type>int</type>
+                    <conditions>
+                        <condition>
+                            <name>cod_papel</name>
+                            <type>int</type>
+                            <sqlexpression>eq</sqlexpression>
+                        </condition>
+                        <condition>
+                            <name>in_cod_papel</name>
+                            <type>array_int</type>
+                            <sqlexpression>in</sqlexpression>
+                        </condition>
+                        <condition>
+                            <name>not_in_cod_papel</name>
+                            <type>array_int</type>
+                            <sqlexpression>notIn</sqlexpression>
+                        </condition>
+                    </conditions>
+                </column>
+                <column>
+                    <name>Peso_Neto</name>
+                    <alias>peso_neto</alias>
+                    <type>int</type>
+                    <visible>1</visible>
+                    <sqlexpression>sum</sqlexpression>
+                </column>
+            </columns>
+        </from>
+        <joins>
+            <join>
+                <type>inner</type>
+                <table>CD</table>
+                <table>dbo</table>
+                <table>Pallets</table>
+                <alias>pallets</alias>
+                <quote>1</quote>
+                <columns>
+                    <column>
+                        <name>Id_Producto</name>
+                        <alias>id_producto</alias>
+                        <type>string</type>
+                        <joinConditions>
+                            <joinCondition>
+                                <arguments>
+                                    <argument>p.id_producto</argument>
+                                </arguments>
+                            </joinCondition>
+                        </joinConditions>
+                    </column>
+                    <column>
+                        <name>orden_c</name>
+                        <alias>orden_c</alias>
+                        <type>string</type>
+                        <conditions>
+                            <condition>
+                                <name>external_join_column_orden_c</name>
+                                <paramTemplate>:colname = :param</paramTemplate>
+                                <type>columnname</type>
+                            </condition>
+                        </conditions>
+                    </column>
+                    <column>
+                        <name>maquina</name>
+                        <alias>maquina</alias>
+                        <type>string</type>
+                        <conditions>
+                            <condition>
+                                <name>external_join_column_maquina</name>
+                                <paramTemplate>SUBSTRING(:colname, 1, 5) = SUBSTRING(:param, 1, 5)</paramTemplate>
+                                <type>columnname</type>
+                            </condition>
+                        </conditions>
+                    </column>
+                </columns>
+            </join>
+        </joins>
+    </statement>
+</statements>
