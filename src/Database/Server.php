@@ -10,12 +10,12 @@ class Server extends \Swoole\Server
 
     public ?LoggerInterface $logger;
     public LoaderInterface $loader;
-    public PoolCollection $poolCollection;
+    public ConnectionConfigCollection $poolCollection;
     public Connector $connector;
 
     public function __construct(
         Connector $connector,
-        PoolCollection $poolCollection,
+        ConnectionConfigCollection $poolCollection,
         LoaderInterface $loader,
         string $host = '0.0.0.0',
         int $port = 0,
