@@ -17,7 +17,7 @@ use Tabula17\Satelles\Utilis\Cache\CacheManagerInterface;
  */
 class XmlFile implements LoaderInterface
 {
-  //  private(set) ?CacheManagerInterface $cacheManager;
+    //  private(set) ?CacheManagerInterface $cacheManager;
     private(set) string $baseDir {
         set {
             if (!realpath($value) || !is_dir($value)) {
@@ -39,7 +39,7 @@ class XmlFile implements LoaderInterface
 
     /**
      */
-    public function __construct(string $baseDir,  private(set) readonly ?CacheManagerInterface $cacheManager = null, private readonly ?LoggerInterface $logger = null)
+    public function __construct(string $baseDir, private(set) readonly ?CacheManagerInterface $cacheManager = null, private readonly ?LoggerInterface $logger = null)
     {
         $this->baseDir = $baseDir;
     }
@@ -223,6 +223,7 @@ class XmlFile implements LoaderInterface
                 }
 
                 foreach ($variants as $member => $variant) {
+                    $this->logger?->debug("Processing variant $member " . is_array($variant) ? implode(', ', $variant) : $variant);
                     foreach ($variant as $allowed) {
                         $descriptor = $statement;
                         ArrayUtilities::setArrayValueByPath($descriptor, 'metadata.' . $member, $allowed);
