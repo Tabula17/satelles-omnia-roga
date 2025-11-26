@@ -150,10 +150,13 @@ class Server extends \Swoole\Server
      */
     private function processRequest(Server $server, int $fd, string $data): void
     {
-        if(str_contains('forceReload', $data)){
+        if (str_contains('forceReload', $data)) {
             $request = json_decode($data, true, 512, JSON_THROW_ON_ERROR);
-            if(isset($request['cfg']) && is_string($request['cfg'])) {
-                $this->addToReload($request['cfg']);
+            if (isset($request['forceReload'])) {
+                foreach ($request['forceReload'] as $cfg) {
+                    $this->addToReload($cfg);
+
+                }
             }
             return;
         }
