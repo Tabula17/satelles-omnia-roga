@@ -5,20 +5,20 @@ namespace Tabula17\Satelles\Omnia\Roga\Database;
 use Tabula17\Satelles\Omnia\Roga\Exception\InvalidArgumentException;
 use Tabula17\Satelles\Utilis\Collection\GenericCollection;
 
-class ConnectionConfigCollection extends GenericCollection
+class DbConfigCollection extends GenericCollection
 {
-    protected static string $type = ConnectionConfig::class;
+    protected static string $type = DbConfig::class;
 
-    public function __construct(ConnectionConfig ...$config)
+    public function __construct(DbConfig ...$config)
     {
         $this->values = $config;
     }
 
     /**
      * @param string $name
-     * @return ConnectionConfig|null
+     * @return DbConfig|null
      */
-    public function findByName(string $name): ConnectionConfig|null
+    public function findByName(string $name): DbConfig|null
     {
         return $this->findBy('name', $name);
     }
@@ -27,7 +27,7 @@ class ConnectionConfigCollection extends GenericCollection
         $this->removeBy('name', $name);
     }
 
-    public function filterByHost(string $name): ConnectionConfigCollection
+    public function filterByHost(string $name): DbConfigCollection
     {
         return $this->filterBy('host', $name);
     }
@@ -35,7 +35,7 @@ class ConnectionConfigCollection extends GenericCollection
     /**
      * @throws InvalidArgumentException
      */
-    public function findByDriver(string $driver): ConnectionConfig|null
+    public function findByDriver(string $driver): DbConfig|null
     {
         return $this->findBy('driver', DriversEnum::fromName($driver));
     }
@@ -43,31 +43,31 @@ class ConnectionConfigCollection extends GenericCollection
     /**
      * @throws InvalidArgumentException
      */
-    public function filterByDriver(string $driver): ConnectionConfigCollection
+    public function filterByDriver(string $driver): DbConfigCollection
     {
         return $this->filterBy('driver', DriversEnum::fromName($driver));
     }
 
     public function findBy(string $key, mixed $value)
     {
-        return $this->find(fn(ConnectionConfig $config) => $config->$key === $value);
+        return $this->find(fn(DbConfig $config) => $config->$key === $value);
     }
 
-    public function filterBy(string $key, mixed $value): ConnectionConfigCollection
+    public function filterBy(string $key, mixed $value): DbConfigCollection
     {
-        return $this->filter(fn(ConnectionConfig $config) => $config->$key === $value);
+        return $this->filter(fn(DbConfig $config) => $config->$key === $value);
     }
     public function removeBy(string $key, mixed $value): void
     {
          $this->remove($this->findBy($key, $value));
     }
-    public static function fromArray(array $config): ConnectionConfigCollection
+    public static function fromArray(array $config): DbConfigCollection
     {
         return new self(...array_map(static fn($item) => $item instanceof self::$type ? $item : new self::$type($item), $config));
     }
 
     public function collect(string $key): array
     {
-        return array_filter(array_map(static fn(ConnectionConfig $config) => $config->$key, $this->values));
+        return array_filter(array_map(static fn(DbConfig $config) => $config->$key, $this->values));
     }
 }

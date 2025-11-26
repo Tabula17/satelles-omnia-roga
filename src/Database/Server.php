@@ -21,7 +21,7 @@ class Server extends \Swoole\Server
 
     public function __construct(
         public Connector                        $connector,
-        public ConnectionConfigCollection       $poolCollection,
+        public DbConfigCollection               $poolCollection,
         public LoaderInterface                  $loader,
         string                                  $host = '0.0.0.0',
         int                                     $port = 0,

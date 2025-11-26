@@ -21,8 +21,8 @@ class Connector
     //protected(set) PoolCollection $pools ;
     private array $poolCount = [];
     private array $usedConnections = [];
-    private ConnectionConfigCollection $unreachableConnections;
-    private ConnectionConfigCollection $loadedConnections;
+    private DbConfigCollection $unreachableConnections;
+    private DbConfigCollection $loadedConnections;
 
     /**
      * Constructor method for initializing the object with the provided parameters.
@@ -42,19 +42,19 @@ class Connector
         private ?LoggerInterface $logger = null
     )
     {
-        $this->unreachableConnections = new ConnectionConfigCollection();
-        $this->loadedConnections = new ConnectionConfigCollection();
+        $this->unreachableConnections = new DbConfigCollection();
+        $this->loadedConnections = new DbConfigCollection();
     }
 
     /**
      * Loads connections from the given collection of connection configurations.
      *
-     * @param ConnectionConfigCollection $configs A collection of connection configuration objects to be loaded.
+     * @param DbConfigCollection $configs A collection of connection configuration objects to be loaded.
      * @param int $poolSize The size of the connection pool must be greater than 0. Defaults to 12.
      * @return void
      * @throws InvalidArgumentException
      */
-    public function loadConnections(ConnectionConfigCollection $configs, int $poolSize = 12): void
+    public function loadConnections(DbConfigCollection $configs, int $poolSize = 12): void
     {
         foreach ($configs as $config) {
             $this->loadConnection($config, $poolSize);
@@ -64,12 +64,12 @@ class Connector
     /**
      * Loads a connection pool based on the provided configuration and pool size.
      *
-     * @param ConnectionConfig $config The configuration object for establishing a database connection.
+     * @param DbConfig $config The configuration object for establishing a database connection.
      * @param int $poolSize The size of the connection pool must be greater than 0. Defaults to 12.
      * @return void
      * @throws InvalidArgumentException If the provided pool size is less than or equal to 0.
      */
-    public function loadConnection(ConnectionConfig $config, int $poolSize = 12): void
+    public function loadConnection(DbConfig $config, int $poolSize = 12): void
     {
         if ($config->canConnect()) {
             if(isset($config->maxConnections) && ($config->maxConnections > 0)){
@@ -133,7 +133,7 @@ class Connector
         }
     }
 
-    public function getUnreachableConnections(): ConnectionConfigCollection
+    public function getUnreachableConnections(): DbConfigCollection
     {
         return $this->unreachableConnections;
     }
@@ -245,8 +245,8 @@ class Connector
     {
         $this->pools = new PoolCollection();
         $this->poolCount = [];
-        $this->loadedConnections = new ConnectionConfigCollection();
-        $this->unreachableConnections = new ConnectionConfigCollection();
+        $this->loadedConnections = new DbConfigCollection();
+        $this->unreachableConnections = new DbConfigCollection();
     }
 
     /**
