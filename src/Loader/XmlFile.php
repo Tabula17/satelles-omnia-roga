@@ -223,7 +223,7 @@ class XmlFile implements LoaderInterface
                 }
 
                 foreach ($variants as $member => $variant) {
-                    $this->logger?->debug("Processing variant $member " . is_array($variant) ? implode(', ', $variant) : $variant);
+                    $this->logger?->debug("Processing variant $member " . var_export($variant, true));
                     foreach ($variant as $allowed) {
                         $descriptor = $statement;
                         ArrayUtilities::setArrayValueByPath($descriptor, 'metadata.' . $member, $allowed);
