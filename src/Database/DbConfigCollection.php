@@ -12,8 +12,7 @@ class DbConfigCollection extends ConnectionCollection
 
     public function __construct(DbConfig ...$config)
     {
-        $this->values = $config;
-        parent::__construct();
+        parent::__construct(...$config);
     }
 
     /**
