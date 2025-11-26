@@ -6,37 +6,36 @@ use JsonException;
 use PDO;
 use Psr\Log\LoggerInterface;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
+use Tabula17\Satelles\Omnia\Roga\Exception\ConnectionException;
+use Tabula17\Satelles\Omnia\Roga\Exception\ExceptionDefinitions;
+use Tabula17\Satelles\Omnia\Roga\Exception\StatementExecutionException;
 use Tabula17\Satelles\Omnia\Roga\LoaderInterface;
 use Tabula17\Satelles\Omnia\Roga\StatementBuilder;
 use Tabula17\Satelles\Utilis\Exception\InvalidArgumentException;
+use Tabula17\Satelles\Utilis\Middleware\TCPmTLSAuthMiddleware;
 
 class Server extends \Swoole\Server
 {
 
-    public ?LoggerInterface $logger;
-    public LoaderInterface $loader;
-    public ConnectionConfigCollection $poolCollection;
-    public Connector $connector;
     private array $privateEvents = ['workerStart', 'receive'];
+
     public function __construct(
-        Connector                  $connector,
-        ConnectionConfigCollection $poolCollection,
-        LoaderInterface            $loader,
-        string                     $host = '0.0.0.0',
-        int                        $port = 0,
-        int                        $mode = SWOOLE_BASE,
-        int                        $sock_type = SWOOLE_SOCK_TCP,
-        ?LoggerInterface           $logger = null
+        public Connector                        $connector,
+        public ConnectionConfigCollection       $poolCollection,
+        public LoaderInterface                  $loader,
+        string                                  $host = '0.0.0.0',
+        int                                     $port = 0,
+        int                                     $mode = SWOOLE_BASE,
+        int                                     $sock_type = SWOOLE_SOCK_TCP,
+        public ?LoggerInterface                 $logger = null,
+        private readonly ?LoggerInterface       $db_logger = null,
+        private readonly ?TCPmTLSAuthMiddleware $mtlsMiddleware = null
 
     )
     {
-        $this->connector = $connector;
-        $this->poolCollection = $poolCollection;
-        $this->loader = $loader;
-        $this->logger = $logger;
         parent::__construct($host, $port, $mode, $sock_type);
-        $this->_listen('workerStart', [$this, 'init']);
-        $this->_listen('receive', [$this, 'process']);
+        $this->onPrivateEvent('workerStart', [$this, 'init']);
+        $this->onPrivateEvent('receive', [$this, 'process']);
     }
 
     public function start(): bool
@@ -44,18 +43,21 @@ class Server extends \Swoole\Server
         $this->logger->info("Iniciando servidor TCP en {$this->host}:{$this->port}");
         return parent::start();
     }
+
     public function on(string $event_name, callable $callback): bool
     {
-        if(in_array($event_name, $this->privateEvents, true)){
+        if (in_array($event_name, $this->privateEvents, true)) {
             $this->logger->warning("Evento privado $event_name no permitido");
             return false;
         }
         return parent::on($event_name, $callback);
     }
-    private function _listen(string $event_name, callable $callback): void
+
+    private function onPrivateEvent(string $event_name, callable $callback): void
     {
         parent::on($event_name, $callback);
     }
+
     /**
      * Initializes the TCP server and loads the connection pools.
      *
@@ -80,7 +82,7 @@ class Server extends \Swoole\Server
             $server->logger->error("Unreachable connections: " . implode(', ', $server->connector->getUnreachableConnections()->collect('name')));
             foreach ($server->connector->getUnreachableConnections() as $conn) {
                 if (isset($conn->lastConnectionError)) {
-                    $server->logger->error($conn->name . ' -> ' . $conn->lastConnectionError);
+                    $server->logger->notice($conn->name . ' -> ' . $conn->lastConnectionError);
                 }
             }
         }
@@ -111,7 +113,7 @@ class Server extends \Swoole\Server
      * @param string $message Mensaje de error
      * @return void
      */
-    private function sendError(Server $server,int $fd, string $message): void
+    private function sendError(Server $server, int $fd, string $message): void
     {
         try {
             $server->sendResponse($server, $fd, [
@@ -134,8 +136,10 @@ class Server extends \Swoole\Server
      * @return void This method does not return a value but sends a response back to the client.
      * @throws ConfigException
      * @throws JsonException
+     * @throws ConnectionException
+     * @throws StatementExecutionException
      */
-    private function processRequest(Server $server,int $fd, string $data): void
+    private function processRequest(Server $server, int $fd, string $data): void
     {
         $request = new RequestDescriptor($data);
         $builder = new StatementBuilder(
@@ -150,21 +154,33 @@ class Server extends \Swoole\Server
         /** @var PDO $conn */
         $conn = $server->connector->getConnection($builder->getMetadataValue('connection'));
         if (!isset($conn)) {
-            throw new \RuntimeException('No connection found for ' . $builder->getMetadataValue('connection') . '');
+            throw new ConnectionException(sprintf(ExceptionDefinitions::POOL_NOT_FOUND->value, $builder->getMetadataValue('connection')), 500);
         }
         $stmt = $conn->prepare($builder->getStatement());
         foreach ($builder->getBindings() as $key => $value) {
             $stmt->bindParam($key, $value, $builder->getParamType($key)); //bindValue($key, $value);
         }
         $stmt->setFetchMode(PDO::FETCH_ASSOC);
-        $stmt->execute();
+        try {
+            $stmt->execute();
+        } catch (\Throwable $e) {
+            $server->db_logger->error($builder->getPrettyStatement(), [
+                'error' => $e->getMessage(),
+                'connection' => $server->connector->getPoolStats($builder->getMetadataValue('connection')),
+                'bindings' => $builder->getBindings(),
+                'builderParams' => $builder->getParams() ?? [],
+                'request' => $request->toArray()
+            ]);
+            throw new StatementExecutionException($e->getMessage(), 500, $e);
+        }
         $result = $stmt->fetchAll();
-        $server->logger->info($builder->getStatement(), [
+        $server->db_logger->info($builder->getPrettyStatement(), [
                 'connection' => $server->connector->getPoolStats($builder->getMetadataValue('connection')),
                 'bindings' => $builder->getBindings(),
                 'requiredParams' => $builder->getRequiredParams() ?? [],
                 'request' => $request->toArray(),
-                'total' => count($result)]
+                'total' => count($result)
+            ]
         );
         $server->connector->putConnection($conn);
         $server->sendResponse($server, $fd, [
@@ -176,19 +192,30 @@ class Server extends \Swoole\Server
         );
     }
 
+    public function process(Server $server, int $fd, int $reactorId, string $data): void
+    {
+        if ($this->mtlsMiddleware !== null) {
+            $this->mtlsMiddleware->handle($server, $fd, $data, function ($server, $context) {
+                $this->doProcess($server, $context['fd'], $context['data']);
+            });
+        } else {
+            $this->doProcess($server, $fd, $data);
+        }
+    }
+
     /**
      * Processes a request received from the server, delegating it to the appropriate handler
      * and managing errors if any exception occurs.
      *
      * @param Server $server The server instance handling the request.
      * @param int $fd The file descriptor representing the connection.
-     * @param int $reactorId The ID of the reactor thread managing this connection.
      * @param string $data The data received from the client.
      *
      * @return void
      */
-    public function process(Server $server, int $fd, int $reactorId, string $data): void
+    private function doProcess(Server $server, int $fd, string $data): void
     {
+
         try {
             $this->processRequest($server, $fd, $data);
         } catch (\Throwable $e) {
