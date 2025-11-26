@@ -40,14 +40,14 @@ class Server extends \Swoole\Server
 
     public function start(): bool
     {
-        $this->logger->info("Iniciando servidor TCP en {$this->host}:{$this->port}");
+        $this->logger?->info("Iniciando servidor TCP en {$this->host}:{$this->port}");
         return parent::start();
     }
 
     public function on(string $event_name, callable $callback): bool
     {
         if (in_array($event_name, $this->privateEvents, true)) {
-            $this->logger->warning("Evento privado $event_name no permitido");
+            $this->logger?->warning("Evento privado $event_name no permitido");
             return false;
         }
         return parent::on($event_name, $callback);
@@ -73,21 +73,21 @@ class Server extends \Swoole\Server
      */
     public function init(Server $server, int $workerId): void
     {
-        $server->logger->info("Iniciando POOL de conexiones en worker #{$workerId}");
+        $server->logger?->info("Iniciando POOL de conexiones en worker #{$workerId}");
         $server->connector->loadConnections($server->poolCollection);
         foreach ($server->connector->getPoolGroupNames() as $poolName) {
-            $server->logger->info("Worker #{$workerId}:  $poolName READY: " . $server->connector->getPoolCount($poolName) . ' pools >> ' . implode(', ', $server->connector->getPoolNamesForGroup($poolName)));
+            $server->logger?->info("Worker #{$workerId}:  $poolName READY: " . $server->connector->getPoolCount($poolName) . ' pools >> ' . implode(', ', $server->connector->getPoolNamesForGroup($poolName)));
         }
         if ($server->connector->getUnreachableConnections()->count() > 0) {
-            $server->logger->error("Unreachable connections: " . implode(', ', $server->connector->getUnreachableConnections()->collect('name')));
+            $server->logger?->error("Unreachable connections: " . implode(', ', $server->connector->getUnreachableConnections()->collect('name')));
             foreach ($server->connector->getUnreachableConnections() as $conn) {
                 if (isset($conn->lastConnectionError)) {
-                    $server->logger->notice($conn->name . ' -> ' . $conn->lastConnectionError);
+                    $server->logger?->notice($conn->name . ' -> ' . $conn->lastConnectionError);
                 }
             }
         }
         $status = $server->getWorkerStatus($workerId);
-        $server->logger->info("Worker #{$workerId} status: " . $status);
+        $server->logger?->info("Worker #{$workerId} status: " . $status);
         //return parent::start();
     }
 
@@ -148,9 +148,9 @@ class Server extends \Swoole\Server
             reload: false
         );
         $identifier = $request->getFor();
-        $server->logger->debug('Buscando statement para ' . implode(': ', $identifier));
+        $server->logger?->debug('Buscando statement para ' . implode(': ', $identifier));
         $builder->loadStatementBy(...$identifier)?->setValues($request->params ?? []);
-        $server->logger->debug('Buscando conexión para ' . $builder->getMetadataValue('connection'));
+        $server->logger?->debug('Buscando conexión para ' . $builder->getMetadataValue('connection'));
         /** @var PDO $conn */
         $conn = $server->connector->getConnection($builder->getMetadataValue('connection'));
         if (!isset($conn)) {
@@ -164,7 +164,7 @@ class Server extends \Swoole\Server
         try {
             $stmt->execute();
         } catch (\Throwable $e) {
-            $server->db_logger->error($builder->getPrettyStatement(), [
+            $server->db_logger?->error($builder->getPrettyStatement(), [
                 'error' => $e->getMessage(),
                 'connection' => $server->connector->getPoolStats($builder->getMetadataValue('connection')),
                 'bindings' => $builder->getBindings(),
@@ -174,7 +174,7 @@ class Server extends \Swoole\Server
             throw new StatementExecutionException($e->getMessage(), 500, $e);
         }
         $result = $stmt->fetchAll();
-        $server->db_logger->info($builder->getPrettyStatement(), [
+        $server->db_logger?->info($builder->getPrettyStatement(), [
                 'connection' => $server->connector->getPoolStats($builder->getMetadataValue('connection')),
                 'bindings' => $builder->getBindings(),
                 'requiredParams' => $builder->getRequiredParams() ?? [],
@@ -194,8 +194,10 @@ class Server extends \Swoole\Server
 
     public function process(Server $server, int $fd, int $reactorId, string $data): void
     {
+        $server->logger?->debug("Procesado request de $fd en proceso > #$reactorId");
         if ($this->mtlsMiddleware !== null) {
             $this->mtlsMiddleware->handle($server, $fd, $data, function ($server, $context) {
+                $server->logger?->debug("Autorización SSL exitosa. Procesado request de $context[fd] en proceso > #$context[reactor_id]");
                 $this->doProcess($server, $context['fd'], $context['data']);
             });
         } else {
