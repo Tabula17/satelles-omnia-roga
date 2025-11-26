@@ -175,7 +175,9 @@ class Server extends \Swoole\Server
                 ]);
                 throw new StatementExecutionException($e->getMessage(), 500, $e);
             }
+            $stmt->
             $result = $stmt->fetchAll();
+
             $server->db_logger?->info($builder->getPrettyStatement(), [
                     'connection' => $server->connector->getPoolStats($builder->getMetadataValue('connection')),
                     'bindings' => $builder->getBindings(),

@@ -20,8 +20,21 @@ use Tabula17\Satelles\Utilis\Config\AbstractDescriptor;
  */
 class MetadataDescriptor extends AbstractDescriptor
 {
+    private(set) array $availableOperations = ['select', 'insert', 'update', 'delete', 'execute', 'exec', 'call', 'sync'];
     protected(set) string $connection;
-    protected(set) string $operation;
+    protected(set) string $operation {
+        set(string $value) {
+            $check = explode(',', $value);
+            foreach ($check as $k => $item) {
+                if (!in_array($item, $this->availableOperations)) {
+                    unset($check[$k]);
+                }
+            }
+            $value = implode(',', $check);
+
+            $this->operation = strtolower($value);
+        }
+    }
     protected(set) array|string $variant = [];
     protected(set) array|string $allowed = [];
     protected(set) array|string $client = [];
