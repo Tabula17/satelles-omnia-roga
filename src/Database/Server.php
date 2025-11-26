@@ -31,6 +31,7 @@ class Server extends \Swoole\Server
         $this->loader = $loader;
         $this->logger = $logger;
         parent::__construct($host, $port, $mode, $sock_type);
+        $this->on('workerStart', [$this, 'init']);
     }
 
     /**
@@ -41,10 +42,9 @@ class Server extends \Swoole\Server
      * their readiness status. If there are any unreachable connections,
      * they are logged along with any associated errors.
      *
-     * @return bool Returns true if the parent start method execution is successful.k
      * @throws InvalidArgumentException
      */
-    public function start(): bool
+    public function init(): void
     {
         $this->logger->info("Iniciando servidor TCP en {$this->host}:{$this->port}");
         $this->connector->loadConnections($this->poolCollection);
@@ -59,6 +59,6 @@ class Server extends \Swoole\Server
                 }
             }
         }
-        return parent::start();
+        //return parent::start();
     }
 }
