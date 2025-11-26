@@ -14,11 +14,15 @@ class Arguments extends Base
         Composite::class,
     ];
     protected array $prettyChars = ['    ', "\n    ", ''];
+
     /**
      * @return string
      */
     public function __toString()
     {
+        if ($this->count() === 0) {
+            return '';
+        }
         if ($this->count() === 1) {
             return (string)$this->parts[0];
         }
