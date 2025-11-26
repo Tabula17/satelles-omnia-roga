@@ -224,13 +224,16 @@ class XmlFile implements LoaderInterface
 
                 foreach ($variants as $member => $variant) {
                     $this->logger?->debug("Processing variant $member " . var_export($variant, true));
+                    if (!is_array($variant)) {
+                        $variant = [$variant];
+                    }
                     foreach ($variant as $allowed) {
                         $descriptor = $statement;
                         ArrayUtilities::setArrayValueByPath($descriptor, 'metadata.' . $member, $allowed);
 
                         foreach ($subqueries as $path => $subDescriptors) {
 
-                            $currentPaths = ArrayUtilities::getArrayPathsByKey($descriptor, 'subquery', []);
+                          //  $currentPaths = ArrayUtilities::getArrayPathsByKey($descriptor, 'subquery', []);
 
                             if (ArrayUtilities::pathExisits($descriptor, $path)) {
                                 $subqueryBase = ArrayUtilities::getArrayValueByPath($descriptor, $path);
