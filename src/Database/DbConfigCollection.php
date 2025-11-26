@@ -41,7 +41,7 @@ class DbConfigCollection extends ConnectionCollection
         return $this->filter(fn(DbConfig $config) => $config->$key === $value);
     }
 
-    public static function fromArray(array $config): DbConfigCollection
+    public static function fromArray(array $config, ?string $type = null): DbConfigCollection
     {
         return new self(...array_map(static fn($item) => $item instanceof self::$type ? $item : new self::$type($item), $config));
     }
