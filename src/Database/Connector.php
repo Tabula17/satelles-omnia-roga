@@ -399,12 +399,6 @@ class Connector
         if (!$pool) {
             return ['error' => 'Pool not found'];
         }
-        if ($pool instanceof PDOPoolExtended) {
-            return [
-
-            ];
-        }
-
         $out = [
             'available' => $pool->available(),
             'capacity' => $pool->getSize(),
