@@ -18,7 +18,6 @@ class Server extends \Swoole\Server
 {
 
     private array $privateEvents = ['workerStart', 'receive'];
-    private array $forceReload = [];
 
     public function __construct(
         public Connector                        $connector,
@@ -128,12 +127,6 @@ class Server extends \Swoole\Server
         }
     }
 
-    public function addToReload(string $cfg): void
-    {
-        if (!in_array($cfg, $this->forceReload, true)) {
-            $this->forceReload[] = $cfg;
-        }
-    }
 
     /**
      * Processes an incoming request, builds and executes a database statement
@@ -150,26 +143,11 @@ class Server extends \Swoole\Server
      */
     private function processRequest(Server $server, int $fd, string $data): void
     {
-        if (str_contains('forceReload', $data)) {
-            $request = json_decode($data, true, 512, JSON_THROW_ON_ERROR);
-            if (isset($request['forceReload'])) {
-                foreach ($request['forceReload'] as $cfg) {
-                    $this->addToReload($cfg);
-
-                }
-            }
-            return;
-        }
         $request = new RequestDescriptor($data);
-        //$force = in_array($request->cfg, $this->forceReload, true);
-        $force = array_search($request->cfg, $this->forceReload, true);
-        if ($force) {
-            unset($this->forceReload[$force]);
-        }
         $builder = new StatementBuilder(
             statementName: $request->cfg,
             loader: $server->loader,
-            reload: $force !== false
+            reload: $request->forceReload
         );
         $identifier = $request->getFor();
         $server->logger?->debug('Buscando statement para ' . implode(': ', $identifier));

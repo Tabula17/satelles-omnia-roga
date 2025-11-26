@@ -12,6 +12,7 @@ class RequestDescriptor extends AbstractDescriptor
     protected(set) int|string $allowed;
     protected(set) int|string $client;
     protected(set) array $params = [];
+    protected(set) ?bool $forceReload = false;
 
     /**
      * @throws \JsonException
