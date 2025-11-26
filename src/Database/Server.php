@@ -138,6 +138,7 @@ class Server extends \Swoole\Server
      * @throws JsonException
      * @throws ConnectionException
      * @throws StatementExecutionException
+     * @throws \Throwable
      */
     private function processRequest(Server $server, int $fd, string $data): void
     {
@@ -156,40 +157,43 @@ class Server extends \Swoole\Server
         if (!isset($conn)) {
             throw new ConnectionException(sprintf(ExceptionDefinitions::POOL_NOT_FOUND->value, $builder->getMetadataValue('connection')), 500);
         }
-        $stmt = $conn->prepare($builder->getStatement());
-        foreach ($builder->getBindings() as $key => $value) {
-            $stmt->bindParam($key, $value, $builder->getParamType($key)); //bindValue($key, $value);
-        }
-        $stmt->setFetchMode(PDO::FETCH_ASSOC);
         try {
-            $stmt->execute();
-        } catch (\Throwable $e) {
-            $server->db_logger?->error($builder->getPrettyStatement(), [
-                'error' => $e->getMessage(),
-                'connection' => $server->connector->getPoolStats($builder->getMetadataValue('connection')),
-                'bindings' => $builder->getBindings(),
-                'builderParams' => $builder->getParams() ?? [],
-                'request' => $request->toArray()
-            ]);
-            throw new StatementExecutionException($e->getMessage(), 500, $e);
+            $stmt = $conn->prepare($builder->getStatement());
+            foreach ($builder->getBindings() as $key => $value) {
+                $stmt->bindParam($key, $value, $builder->getParamType($key)); //bindValue($key, $value);
+            }
+            $stmt->setFetchMode(PDO::FETCH_ASSOC);
+            try {
+                $stmt->execute();
+            } catch (\Throwable $e) {
+                $server->db_logger?->error($builder->getPrettyStatement(), [
+                    'error' => $e->getMessage(),
+                    'connection' => $server->connector->getPoolStats($builder->getMetadataValue('connection')),
+                    'bindings' => $builder->getBindings(),
+                    'builderParams' => $builder->getParams() ?? [],
+                    'request' => $request->toArray()
+                ]);
+                throw new StatementExecutionException($e->getMessage(), 500, $e);
+            }
+            $result = $stmt->fetchAll();
+            $server->db_logger?->info($builder->getPrettyStatement(), [
+                    'connection' => $server->connector->getPoolStats($builder->getMetadataValue('connection')),
+                    'bindings' => $builder->getBindings(),
+                    'requiredParams' => $builder->getRequiredParams() ?? [],
+                    'request' => $request->toArray(),
+                    'total' => count($result)
+                ]
+            );
+            $server->sendResponse($server, $fd, [
+                    'data' => $result,
+                    'status' => 200,
+                    'message' => $builder->getMetadataValue('operation') . ': OK',
+                    'total' => count($result)
+                ]
+            );
+        } finally {
+            $server->connector->putConnection($conn);
         }
-        $result = $stmt->fetchAll();
-        $server->db_logger?->info($builder->getPrettyStatement(), [
-                'connection' => $server->connector->getPoolStats($builder->getMetadataValue('connection')),
-                'bindings' => $builder->getBindings(),
-                'requiredParams' => $builder->getRequiredParams() ?? [],
-                'request' => $request->toArray(),
-                'total' => count($result)
-            ]
-        );
-        $server->connector->putConnection($conn);
-        $server->sendResponse($server, $fd, [
-                'data' => $result,
-                'status' => 200,
-                'message' => $builder->getMetadataValue('operation') . ': OK',
-                'total' => count($result)
-            ]
-        );
     }
 
     public function process(Server $server, int $fd, int $reactorId, string $data): void
