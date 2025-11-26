@@ -14,6 +14,14 @@ use Tabula17\Satelles\Omnia\Roga\StatementBuilder;
 use Tabula17\Satelles\Utilis\Exception\InvalidArgumentException;
 use Tabula17\Satelles\Utilis\Middleware\TCPmTLSAuthMiddleware;
 
+/**
+ * Class Server
+ *
+ * Extends the Swoole\Server class to implement a custom TCP server with support for
+ * connection pools, database configurations, and specific request processing.
+ * It includes methods for handling server initialization, request processing, and
+ * response handling, with logging and error management capabilities.
+ */
 class Server extends \Swoole\Server
 {
 
@@ -116,7 +124,7 @@ class Server extends \Swoole\Server
     private function sendError(Server $server, int $fd, string $message): void
     {
         try {
-            $server->sendResponse($server, $fd, [
+            $this->sendResponse($server, $fd, [
                 'status' => 'error',
                 'message' => $message
             ]);
@@ -165,9 +173,8 @@ class Server extends \Swoole\Server
         try {
             $stmt = $conn->prepare($builder->getStatement());
             foreach ($builder->getBindings() as $key => $value) {
-                $stmt->bindParam($key, $value, $builder->getParamType($key)); //bindValue($key, $value);
+                $stmt->bindValue($key, $value, $builder->getParamType($key)); //bindValue($key, $value);
             }
-            // $stmt->setFetchMode(PDO::FETCH_ASSOC);
             try {
                 $stmt->execute();
             } catch (\Throwable $e) {
@@ -181,23 +188,32 @@ class Server extends \Swoole\Server
                 throw new StatementExecutionException($e->getMessage(), 500, $e);
             }
             $result = [];
-            $total = 0;
             if ($descriptor->canHaveResultset() || $stmt->columnCount() > 0) {
                 $result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                // Manejar múltiples resultsets (stored procedures)
                 while ($stmt->nextRowset()) {
-                    $result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                    if ($stmt->columnCount() > 0) {
+                        $result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                    }
                 }
+
                 $multiRowset = count($result) > 1;
-                if (count($result) === 1) {
-                    $result = $result[0];
-                }
-                $total = count($result, COUNT_RECURSIVE);;
+                $result = $multiRowset ? $result : $result[0];
+                $total = $multiRowset ? array_sum(array_map('count', $result)) : count($result);
             } else {
-                //
-                if ($descriptor->isInsert() && $conn->lastInsertId() !== false) {
-                    $result['lastInsertId'] = $conn->lastInsertId();
+                // Para consultas sin resultados
+                $affectedRows = $stmt->rowCount();
+
+                if ($descriptor->isInsert()) {
+                    $lastInsertId = $conn->lastInsertId();
+                    if ($lastInsertId !== false && $lastInsertId !== '0') {
+                        $result['lastInsertId'] = $lastInsertId;
+                    }
                 }
-                $total = $stmt->rowCount();
+
+                $result['affectedRows'] = $affectedRows;
+                $total = $affectedRows;
             }
 
             $server->db_logger?->info($builder->getPrettyStatement(), [
@@ -209,14 +225,20 @@ class Server extends \Swoole\Server
                     'multiRowset' => $multiRowset ?? false
                 ]
             );
-            $server->sendResponse($server, $fd, [
-                    'data' => $result,
-                    'status' => 200,
-                    'message' => $builder->getMetadataValue('operation') . ': OK',
-                    'total' => $total,
-                    'multiRowset' => $multiRowset ?? false
-                ]
-            );
+            // Respuesta
+            $response = [
+                'data' => $result,
+                'status' => 200,
+                'message' => $builder->getMetadataValue('operation') . ': OK',
+                'total' => $total
+            ];
+
+            if ($multiRowset) {
+                $response['multiRowset'] = true;
+                $response['resultsets'] = count($result);
+            }
+
+            $server->sendResponse($server, $fd, $response);
         } finally {
             $server->connector->putConnection($conn);
         }

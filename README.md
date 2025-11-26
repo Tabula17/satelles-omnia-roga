@@ -1,4 +1,7 @@
-### satelles-omnia-roga
+## XVII: 🛰️ satelles-omnia-roga
+![PHP Version](https://img.shields.io/badge/PHP-8.4%2B-blue)
+![License](https://img.shields.io/github/license/Tabula17/satelles-omnia-roga)
+![Last commit](https://img.shields.io/github/last-commit/Tabula17/satelles-omnia-roga)
 
 SQL statement builder/loader for PHP. It lets you define query descriptors in XML and build parametrized SQL statements at runtime by selecting the appropriate variant from metadata. Useful for keeping SQL outside of code while still offering a strongly-typed builder API.
 
@@ -10,13 +13,14 @@ This is a library package intended to be used from your PHP application. An exam
 - Select a variant of a statement by metadata (e.g., `allowed`, `client`, `variant`).
 - Build and pretty-print SQL; inspect required/optional parameters and final bindings.
 - Optional caching of parsed XML using Redis or Memcached (via `xvii/satelles-utilis-proelio`).
+- Swoole\Server derived class for building and executing SQL statements on the fly in a multithreaded environment.
 
 #### Tech stack
 
 - Language: PHP (>= 8.4)
 - Package manager: Composer
 - Type of project: PHP library (no framework)
-- Notable runtime extensions (required): `ext-zip`, `ext-fileinfo`, `ext-swoole` (>= 5.0), `ext-dom`, `ext-simplexml`, `ext-pdo`
+- Notable runtime extensions (required): `ext-zip`, `ext-fileinfo`, `ext-swoole` (>= 6.0), `ext-dom`, `ext-simplexml`, `ext-pdo`
 - Optional extensions (suggested): `ext-redis`, `ext-memcached`
 
 #### Requirements
@@ -24,15 +28,16 @@ This is a library package intended to be used from your PHP application. An exam
 From `composer.json`:
 
 - PHP 8.4+
-- PHP extensions: zip, fileinfo, swoole>=5.0, dom, simplexml, pdo
+- PHP extensions: zip, fileinfo, swoole>=6.0, dom, simplexml, pdo
 - Optional for caching: redis or memcached
 
 Library dependencies (selected):
 
 - `xvii/satelles-utilis-proelio` (utilities, caching, config)
+
+Other dependencies (optionals):
+
 - `monolog/monolog` (logging)
-- `utopia-php/mongo` (brought as a dependency; not directly used by this library's code paths shown here)
-- `bramus/monolog-colored-line-formatter`
 
 #### Installation
 
@@ -148,7 +153,7 @@ TODO:
 Make sure your environment satisfies:
 
 - PHP 8.4+
-- Enabled extensions: zip, fileinfo, swoole>=5.0, dom, simplexml, pdo
+- Enabled extensions: zip, fileinfo, swoole>=6.0, dom, simplexml, pdo
 - Optional: redis or memcached if you enable caching
 
 #### Development

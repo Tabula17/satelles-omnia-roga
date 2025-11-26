@@ -35,16 +35,14 @@
     "ext-dom": "*",
     "ext-simplexml": "*",
     "ext-pdo": "*",
-    "xvii/satelles-utilis-proelio": "^1.0@dev",
-    "monolog/monolog": "^3.9",
-    "utopia-php/mongo": "^0.11.0",
-    "bramus/monolog-colored-line-formatter": "^3.1"
+    "xvii/satelles-utilis-proelio": "^1.0@dev"
   },
   "require-dev": {
     "swoole/ide-helper": "@dev"
   },
   "suggest": {
     "ext-redis": "Redis extension for caching",
-    "ext-memcached": "Memcached extension for caching"
+    "ext-memcached": "Memcached extension for caching",
+    "monolog/monolog": "Logging"
   }
 }
