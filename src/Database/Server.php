@@ -197,7 +197,7 @@ class Server extends \Swoole\Server
         $server->logger?->debug("Procesado request de $fd en proceso > #$reactorId");
         if ($this->mtlsMiddleware !== null) {
             $this->mtlsMiddleware->handle($server, $fd, $data, function ($server, $context) {
-                $server->logger?->debug("Autorización SSL exitosa. Procesado request de $context[fd] en proceso > #$context[reactor_id]");
+                $server->logger?->debug("Autorización SSL exitosa. Procesado request de {$context['fd']} en proceso > #{$context['reactor_id']}");
                 $this->doProcess($server, $context['fd'], $context['data']);
             });
         } else {
