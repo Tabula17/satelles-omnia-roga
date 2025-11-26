@@ -72,7 +72,7 @@ class Connector
     public function loadConnection(DbConfig $config, int $poolSize = 12): void
     {
         if ($config->canConnect()) {
-            if(isset($config->maxConnections) && ($config->maxConnections > 0)){
+            if (isset($config->maxConnections) && ($config->maxConnections > 0)) {
                 $poolSize = $config->maxConnections;
             }
             if ($poolSize <= 0) {
@@ -310,16 +310,19 @@ class Connector
             $this->getPool($name)?->close();
         }
     }
+
     public function fillPool(string $name): void
     {
         $this->getPool($name)?->fill();
     }
+
     public function closeAllPools(): void
     {
         foreach ($this->pools as $pool) {
             $pool->close();
         }
     }
+
     public function fillAllPools(): void
     {
         foreach ($this->pools as $pool) {
@@ -396,13 +399,29 @@ class Connector
         if (!$pool) {
             return ['error' => 'Pool not found'];
         }
+        if ($pool instanceof PDOPoolExtended) {
+            return [
 
-        return [
+            ];
+        }
+
+        $out = [
             'available' => $pool->available(),
             'capacity' => $pool->getSize(),
             'utilization' => (($pool->getSize() - $pool->available()) / $pool->getSize()) * 100,
             'used_connections' => count(array_filter($this->usedConnections, static fn($pn) => $pn === $name))
         ];
+        if ($pool instanceof PDOPoolExtended) {
+            $out = array_merge($out, [
+                'host' => $pool->getConfig()->getHost(),
+                'port' => (string)$pool->getConfig()->getPort(),
+                'dbname' => $pool->getConfig()->getDbname(),
+                'username' => $pool->getConfig()->getUsername(),
+                'charset' => $pool->getConfig()->getCharset(),
+                'driver' => $pool->getConfig()->getDriver(),
+            ]);
+        }
+        return $out;
     }
 
     public function __destruct()
