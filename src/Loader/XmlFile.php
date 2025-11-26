@@ -39,7 +39,7 @@ class XmlFile implements LoaderInterface
 
     /**
      */
-    public function __construct(string $baseDir,  private(set) readonly ?CacheManagerInterface $cacheManager = null, private readonly LoggerInterface $logger)
+    public function __construct(string $baseDir,  private(set) readonly ?CacheManagerInterface $cacheManager = null, private readonly ?LoggerInterface $logger = null)
     {
         $this->baseDir = $baseDir;
     }
