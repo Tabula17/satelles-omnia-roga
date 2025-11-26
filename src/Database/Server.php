@@ -53,12 +53,12 @@ class Server extends \Swoole\Server
      * connection pool group. It also handles and logs unreachable connections
      * and their corresponding errors if any are detected.
      *
-     * @param mixed $server The server instance that is being initialized.
+     * @param Server $server The server instance that is being initialized.
      * @param int $workerId The unique identifier of the worker process.
      * @return void
      * @throws InvalidArgumentException
      */
-    public function init($server, $workerId): void
+    public function init(Server $server, int $workerId): void
     {
         $this->logger->info("Iniciando POOL de conexiones en worker #{$workerId}");
         $this->connector->loadConnections($this->poolCollection);
@@ -74,7 +74,7 @@ class Server extends \Swoole\Server
             }
         }
         $status = $server->getWorkerStatus($workerId);
-        $this->logger->info("Worker #{$workerId} status: " . implode(', ', $status));
+        $this->logger->info("Worker #{$workerId} status: " . $status);
         //return parent::start();
     }
 
@@ -173,7 +173,7 @@ class Server extends \Swoole\Server
      *
      * @return void
      */
-    private function process(Server $server, int $fd, int $reactorId, string $data): void
+    public function process(Server $server, int $fd, int $reactorId, string $data): void
     {
         try {
             $this->processRequest($fd, $data);
