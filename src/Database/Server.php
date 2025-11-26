@@ -151,6 +151,10 @@ class Server extends \Swoole\Server
         $identifier = $request->getFor();
         $server->logger?->debug('Buscando statement para ' . implode(': ', $identifier));
         $builder->loadStatementBy(...$identifier)?->setValues($request->params ?? []);
+        $descriptor = $builder->getDescriptorBy(...$identifier);
+        if ($descriptor === null) {
+            throw new \InvalidArgumentException(sprintf(ExceptionDefinitions::STATEMENT_NOT_FOUND_FOR_VARIANT->value, implode(': ', $identifier), $request->cfg ?? ''));
+        }
         $server->logger?->debug('Buscando conexión para ' . $builder->getMetadataValue('connection'));
         /** @var PDO $conn */
         $conn = $server->connector->getConnection($builder->getMetadataValue('connection'));
@@ -162,7 +166,7 @@ class Server extends \Swoole\Server
             foreach ($builder->getBindings() as $key => $value) {
                 $stmt->bindParam($key, $value, $builder->getParamType($key)); //bindValue($key, $value);
             }
-            $stmt->setFetchMode(PDO::FETCH_ASSOC);
+            // $stmt->setFetchMode(PDO::FETCH_ASSOC);
             try {
                 $stmt->execute();
             } catch (\Throwable $e) {
@@ -175,22 +179,41 @@ class Server extends \Swoole\Server
                 ]);
                 throw new StatementExecutionException($e->getMessage(), 500, $e);
             }
-            $stmt->
-            $result = $stmt->fetchAll();
+            $result = [];
+            $total = 0;
+            if ($descriptor->canHaveResultset() || $stmt->columnCount() > 0) {
+                $result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                while ($stmt->nextRowset()) {
+                    $result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                }
+                $multiRowset = count($result) > 1;
+                if (count($result) === 1) {
+                    $result = $result[0];
+                }
+                $total = count($result, COUNT_RECURSIVE);;
+            } else {
+                //
+                if($descriptor->isInsert() && $conn->lastInsertId() !== false){
+                    $result['lastInsertId'] = $conn->lastInsertId();
+                }
+                $total = $stmt->rowCount();
+            }
 
             $server->db_logger?->info($builder->getPrettyStatement(), [
                     'connection' => $server->connector->getPoolStats($builder->getMetadataValue('connection')),
                     'bindings' => $builder->getBindings(),
                     'requiredParams' => $builder->getRequiredParams() ?? [],
                     'request' => $request->toArray(),
-                    'total' => count($result)
+                    'total' => $total,
+                    'multiRowset' => $multiRowset ?? false
                 ]
             );
             $server->sendResponse($server, $fd, [
                     'data' => $result,
                     'status' => 200,
                     'message' => $builder->getMetadataValue('operation') . ': OK',
-                    'total' => count($result)
+                    'total' => $total,
+                    'multiRowset' => $multiRowset ?? false
                 ]
             );
         } finally {

@@ -29,7 +29,10 @@ class StatementDescriptor extends AbstractDescriptor
         }
         return isset($this->type) && str_contains($this->type, 'select');
     }
-
+    public function isInsert(): bool
+    {
+        return isset($this->metadata) && $this->metadata->operation === 'insert';
+    }
     public function getOperations(): array
     {
         return $this->metadata?->availableOperations;
