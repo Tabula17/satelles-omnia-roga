@@ -60,54 +60,57 @@ class Server extends \Swoole\Server
      */
     public function init(Server $server, int $workerId): void
     {
-        $this->logger->info("Iniciando POOL de conexiones en worker #{$workerId}");
-        $this->connector->loadConnections($this->poolCollection);
-        foreach ($this->connector->getPoolGroupNames() as $poolName) {
-            $this->logger->info("Worker #{$workerId}:  $poolName READY: " . $this->connector->getPoolCount($poolName) . ' pools >> ' . implode(', ', $this->connector->getPoolNamesForGroup($poolName)));
+        $server->logger->info("Iniciando POOL de conexiones en worker #{$workerId}");
+        $server->connector->loadConnections($server->poolCollection);
+        foreach ($server->connector->getPoolGroupNames() as $poolName) {
+            $server->logger->info("Worker #{$workerId}:  $poolName READY: " . $server->connector->getPoolCount($poolName) . ' pools >> ' . implode(', ', $server->connector->getPoolNamesForGroup($poolName)));
         }
-        if ($this->connector->getUnreachableConnections()->count() > 0) {
-            $this->logger->error("Unreachable connections: " . implode(', ', $this->connector->getUnreachableConnections()->collect('name')));
-            foreach ($this->connector->getUnreachableConnections() as $conn) {
+        if ($server->connector->getUnreachableConnections()->count() > 0) {
+            $server->logger->error("Unreachable connections: " . implode(', ', $server->connector->getUnreachableConnections()->collect('name')));
+            foreach ($server->connector->getUnreachableConnections() as $conn) {
                 if (isset($conn->lastConnectionError)) {
-                    $this->logger->error($conn->name . ' -> ' . $conn->lastConnectionError);
+                    $server->logger->error($conn->name . ' -> ' . $conn->lastConnectionError);
                 }
             }
         }
         $status = $server->getWorkerStatus($workerId);
-        $this->logger->info("Worker #{$workerId} status: " . $status);
+        $server->logger->info("Worker #{$workerId} status: " . $status);
         //return parent::start();
     }
 
     /**
      * Envía una respuesta al cliente
      *
+     * @param Server $server
      * @param int $fd Descriptor de archivo del cliente
      * @param array $response Datos de la respuesta
      * @return void
+     * @throws JsonException
      */
-    private function sendResponse(int $fd, array $response): void
+    private function sendResponse(Server $server, int $fd, array $response): void
     {
-        $this->send($fd, json_encode($response, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_INVALID_UTF8_IGNORE) . "\n");
+        $server->send($fd, json_encode($response, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_INVALID_UTF8_IGNORE) . "\n");
     }
 
     /**
      * Envía un mensaje de error al cliente
      *
+     * @param Server $server
      * @param int $fd Descriptor de archivo del cliente
      * @param string $message Mensaje de error
      * @return void
      */
-    private function sendError(int $fd, string $message): void
+    private function sendError(Server $server,int $fd, string $message): void
     {
         try {
-            $this->sendResponse($fd, [
+            $server->sendResponse($server, $fd, [
                 'status' => 'error',
                 'message' => $message
             ]);
         } catch (\Throwable $e) {
-            $this->logger?->error($e->getMessage());
+            $server->logger?->error($e->getMessage());
         } finally {
-            $this->logger?->error($message);
+            $server->logger?->error($message);
         }
     }
 
@@ -121,20 +124,20 @@ class Server extends \Swoole\Server
      * @throws ConfigException
      * @throws JsonException
      */
-    private function processRequest(int $fd, string $data): void
+    private function processRequest(Server $server,int $fd, string $data): void
     {
         $request = new RequestDescriptor($data);
         $builder = new StatementBuilder(
             statementName: $request->cfg,
-            loader: $this->loader,
+            loader: $server->loader,
             reload: false
         );
         $identifier = $request->getFor();
-        $this->logger->debug('Buscando statement para ' . implode(': ', $identifier));
+        $server->logger->debug('Buscando statement para ' . implode(': ', $identifier));
         $builder->loadStatementBy(...$identifier)?->setValues($request->params ?? []);
-        $this->logger->debug('Buscando conexión para ' . $builder->getMetadataValue('connection'));
+        $server->logger->debug('Buscando conexión para ' . $builder->getMetadataValue('connection'));
         /** @var PDO $conn */
-        $conn = $this->connector->getConnection($builder->getMetadataValue('connection'));
+        $conn = $server->connector->getConnection($builder->getMetadataValue('connection'));
         if (!isset($conn)) {
             throw new \RuntimeException('No connection found for ' . $builder->getMetadataValue('connection') . '');
         }
@@ -145,15 +148,15 @@ class Server extends \Swoole\Server
         $stmt->setFetchMode(PDO::FETCH_ASSOC);
         $stmt->execute();
         $result = $stmt->fetchAll();
-        $this->logger->info($builder->getStatement(), [
-                'connection' => $this->connector->getPoolStats($builder->getMetadataValue('connection')),
+        $server->logger->info($builder->getStatement(), [
+                'connection' => $server->connector->getPoolStats($builder->getMetadataValue('connection')),
                 'bindings' => $builder->getBindings(),
                 'requiredParams' => $builder->getRequiredParams() ?? [],
                 'request' => $request->toArray(),
                 'total' => count($result)]
         );
-        $this->connector->putConnection($conn);
-        $this->sendResponse($fd, [
+        $server->connector->putConnection($conn);
+        $server->sendResponse($server, $fd, [
                 'data' => $result,
                 'status' => 200,
                 'message' => $builder->getMetadataValue('operation') . ': OK',
@@ -176,9 +179,9 @@ class Server extends \Swoole\Server
     public function process(Server $server, int $fd, int $reactorId, string $data): void
     {
         try {
-            $this->processRequest($fd, $data);
+            $this->processRequest($server, $fd, $data);
         } catch (\Throwable $e) {
-            $this->sendError($fd, $e->getMessage());
+            $this->sendError($server, $fd, $e->getMessage());
         }
     }
 }
