@@ -3,10 +3,13 @@
 namespace Tabula17\Satelles\Omnia\Roga;
 
 use Psr\Log\LoggerInterface;
+use Tabula17\Satelles\Omnia\Roga\Builder\DataTypes;
 use Tabula17\Satelles\Omnia\Roga\Builder\DeleteStatement;
 use Tabula17\Satelles\Omnia\Roga\Builder\ExecuteStatement;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expression;
 use Tabula17\Satelles\Omnia\Roga\Builder\InsertStatement;
+use Tabula17\Satelles\Omnia\Roga\Builder\Param;
+use Tabula17\Satelles\Omnia\Roga\Builder\ParamTypes;
 use Tabula17\Satelles\Omnia\Roga\Builder\SelectStatement;
 use Tabula17\Satelles\Omnia\Roga\Builder\StatementProcessorInterface;
 use Tabula17\Satelles\Omnia\Roga\Builder\UnionStatement;
@@ -150,6 +153,17 @@ class StatementBuilder
     public function getParams(): ?array
     {
         return $this->processor?->getParams();
+    }
+
+    public function getParam(string $placeholder): ?Param
+    {
+        return $this->processor?->getParam($placeholder);
+    }
+
+    public function getParamType(string $placeholder): int
+    {
+        $type = $this->processor?->getParam($placeholder)?->getType();
+        return ParamTypes::fromName($type) ?? ParamTypes::STR->value;
     }
 
     public function setValues(array $params): void
