@@ -17,7 +17,7 @@ class Server extends \Swoole\Server
     public LoaderInterface $loader;
     public ConnectionConfigCollection $poolCollection;
     public Connector $connector;
-
+    private array $privateEvents = ['workerStart', 'receive'];
     public function __construct(
         Connector                  $connector,
         ConnectionConfigCollection $poolCollection,
@@ -35,8 +35,8 @@ class Server extends \Swoole\Server
         $this->loader = $loader;
         $this->logger = $logger;
         parent::__construct($host, $port, $mode, $sock_type);
-        $this->on('workerStart', [$this, 'init']);
-        $this->on('receive', [$this, 'process']);
+        $this->_listen('workerStart', [$this, 'init']);
+        $this->_listen('receive', [$this, 'process']);
     }
 
     public function start(): bool
@@ -44,7 +44,18 @@ class Server extends \Swoole\Server
         $this->logger->info("Iniciando servidor TCP en {$this->host}:{$this->port}");
         return parent::start();
     }
-
+    public function on(string $event_name, callable $callback): bool
+    {
+        if(in_array($event_name, $this->privateEvents, true)){
+            $this->logger->warning("Evento privado $event_name no permitido");
+            return false;
+        }
+        return parent::on($event_name, $callback);
+    }
+    private function _listen(string $event_name, callable $callback): void
+    {
+        parent::on($event_name, $callback);
+    }
     /**
      * Initializes the TCP server and loads the connection pools.
      *
