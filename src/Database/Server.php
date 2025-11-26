@@ -18,6 +18,7 @@ class Server extends \Swoole\Server
 {
 
     private array $privateEvents = ['workerStart', 'receive'];
+    private array $forceReload = [];
 
     public function __construct(
         public Connector                        $connector,
@@ -127,6 +128,13 @@ class Server extends \Swoole\Server
         }
     }
 
+    public function addToReload(string $cfg): void
+    {
+        if (!in_array($cfg, $this->forceReload, true)) {
+            $this->forceReload[] = $cfg;
+        }
+    }
+
     /**
      * Processes an incoming request, builds and executes a database statement
      * based on the provided data, and sends a response back with the results.
@@ -142,11 +150,23 @@ class Server extends \Swoole\Server
      */
     private function processRequest(Server $server, int $fd, string $data): void
     {
+        if(str_contains('forceReload', $data)){
+            $request = json_decode($data, true, 512, JSON_THROW_ON_ERROR);
+            if(isset($request['cfg']) && is_string($request['cfg'])) {
+                $this->addToReload($request['cfg']);
+            }
+            return;
+        }
         $request = new RequestDescriptor($data);
+        //$force = in_array($request->cfg, $this->forceReload, true);
+        $force = array_search($request->cfg, $this->forceReload, true);
+        if ($force) {
+            unset($this->forceReload[$force]);
+        }
         $builder = new StatementBuilder(
             statementName: $request->cfg,
             loader: $server->loader,
-            reload: false
+            reload: $force !== false
         );
         $identifier = $request->getFor();
         $server->logger?->debug('Buscando statement para ' . implode(': ', $identifier));
@@ -193,7 +213,7 @@ class Server extends \Swoole\Server
                 $total = count($result, COUNT_RECURSIVE);;
             } else {
                 //
-                if($descriptor->isInsert() && $conn->lastInsertId() !== false){
+                if ($descriptor->isInsert() && $conn->lastInsertId() !== false) {
                     $result['lastInsertId'] = $conn->lastInsertId();
                 }
                 $total = $stmt->rowCount();
