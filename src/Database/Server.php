@@ -173,7 +173,7 @@ class Server extends \Swoole\Server
             throw new ConnectionException(sprintf(ExceptionDefinitions::POOL_NOT_FOUND->value, $builder->getMetadataValue('connection')), 500);
         }
         try {
-            $stmt = $conn->prepare($builder->getStatement(), [PDO::ATTR_CURSOR => PDO::CURSOR_SCROLL, PDO::SQLSRV_ATTR_CURSOR_SCROLL_TYPE => PDO::SQLSRV_CURSOR_BUFFERED]);
+            $stmt = $conn->prepare($builder->getStatement());
             $this->logger?->debug('Statement generado: ' . $builder->getPrettyStatement());
             foreach ($builder->getBindings() as $key => $value) {
                 $this->logger?->debug('Binding: ' . $key . ' => ' . $value);
@@ -200,6 +200,7 @@ class Server extends \Swoole\Server
                 // Manejar múltiples resultsets (stored procedures)
                 $this->logger?->debug('BEFORE nextRowset - Statement is ' . ($stmt ? 'alive' : 'null'));
                 $this->logger?->debug('BEFORE nextRowset - Column count: ' . $stmt->columnCount());
+                $this->logger?->debug('  - NextRowset supported: ' . method_exists($stmt, 'nextRowset'));
                 try {
                     while ($stmt->nextRowset()) {
                         $this->logger?->debug('Checking for next resultset');
@@ -253,8 +254,8 @@ class Server extends \Swoole\Server
                 'total' => $total
             ];
 
-            if ($multiRowset) {
-                $response['multiRowset'] = true;
+            if (isset($multiRowset)) {
+                $response['multiRowset'] = $multiRowset;
                 $response['resultsets'] = count($result);
             }
 
