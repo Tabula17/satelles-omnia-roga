@@ -179,7 +179,6 @@ class Server extends \Swoole\Server
                 $this->logger?->debug('Binding: ' . $key . ' => ' . $value);
                 $stmt->bindValue($key, $value, $builder->getParamType($key)); //bindValue($key, $value);
             }
-            $stmt->setAttribute(PDO::SQLSRV_ATTR_CURSOR_SCROLL_TYPE, PDO::SQLSRV_CURSOR_BUFFERED);
             try {
                 $stmt->execute();
             } catch (\Throwable $e) {
