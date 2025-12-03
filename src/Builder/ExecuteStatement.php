@@ -136,6 +136,7 @@ class ExecuteStatement implements StatementProcessorInterface
 
     public function process(): ExecuteStatement
     {
+        $this->body->clear();
         foreach ($this->params as $argument) {
             if (!isset($this->params[$argument->placeholder])) {
                 $this->params[$argument->placeholder] = $argument;
