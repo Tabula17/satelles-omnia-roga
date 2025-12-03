@@ -4,7 +4,6 @@ namespace Tabula17\Satelles\Omnia\Roga\Database;
 
 use JsonException;
 use PDO;
-use PDOException;
 use Psr\Log\LoggerInterface;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConnectionException;
@@ -14,7 +13,6 @@ use Tabula17\Satelles\Omnia\Roga\LoaderInterface;
 use Tabula17\Satelles\Omnia\Roga\StatementBuilder;
 use Tabula17\Satelles\Utilis\Exception\InvalidArgumentException;
 use Tabula17\Satelles\Utilis\Middleware\TCPmTLSAuthMiddleware;
-use Throwable;
 
 /**
  * Class Server
@@ -197,71 +195,13 @@ class Server extends \Swoole\Server
             if ($descriptor->canHaveResultset() || $stmt->columnCount() > 0) {
                 $this->logger?->debug('Statement have resultset: FETCHING');
                 $result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                // Reemplaza tu bloque de nextRowset con esto:
 
-                $this->logger?->debug('Resultset fetched (' . count($result[0]) . '). Checking for multiple resultsets');
-                $this->logger?->debug('BEFORE nextRowset - Statement is alive');
-                $this->logger?->debug('BEFORE nextRowset - Column count: ' . $stmt->columnCount());
-
-// IMPORTANTE: Para SQL Server, necesitamos un manejo especial
-                try {
-                    $this->logger?->debug('Attempting first nextRowset()');
-
-/*                    [2025-12-03T20:39:19.964018+00:00] db-bridge.DEBUG: Statement have resultset: FETCHING [] []
-                    [2025-12-03T20:39:20.034743+00:00] db-bridge.DEBUG: Resultset fetched (45). Checking for multiple resultsets [] []
-                    [2025-12-03T20:39:20.034903+00:00] db-bridge.DEBUG: BEFORE nextRowset - Statement is alive [] []
-                    [2025-12-03T20:39:20.034982+00:00] db-bridge.DEBUG: BEFORE nextRowset - Column count: 42 [] []
-                    [2025-12-03T20:39:20.035040+00:00] db-bridge.DEBUG: Attempting first nextRowset() [] []
-                    [2025-12-03T20:39:20.035243+00:00] db-bridge.DEBUG: nextRowset() returned: false [] []
-                    [2025-12-03T20:39:20.035448+00:00] db-bridge.DEBUG: nextRowset error info: ["00000",null,null] [] []
-                    [2025-12-03T20:39:20.035586+00:00] db-bridge.DEBUG: Finished checking for multiple resultsets [] []*/
-
-                    // Usar nextRowset() de manera diferente para SQL Server
-                    $hasNextRowset = @$stmt->nextRowset(); // Usar @ para suprimir warnings
-
-                    $this->logger?->debug('nextRowset() returned: ' . ($hasNextRowset ? 'true' : 'false'));
-
-                    if ($hasNextRowset === false) {
-                        $errorInfo = $stmt->errorInfo();
-                        $this->logger?->debug('nextRowset error info: ' . json_encode($errorInfo));
-
-                        // Verificar si es solo "no hay más resultsets" o un error real
-                        if (isset($errorInfo[0]) && $errorInfo[0] === 'IMSSP') {
-                            // Esto es normal: no hay más resultsets
-                            $this->logger?->debug('No more resultsets (normal condition)');
-                        }
-                    }
-
-                    while ($hasNextRowset) {
-                        $this->logger?->debug('Next resultset available. Column count: ' . $stmt->columnCount());
-
-                        if ($stmt->columnCount() > 0) {
-                            $this->logger?->debug('Next resultset has columns, fetching');
-                            $result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                            $this->logger?->debug('Next resultset fetched: ' . count(end($result)) . ' rows');
-                        } else {
-                            $this->logger?->debug('Next resultset has no columns');
-                        }
-
-                        // Intentar obtener el siguiente resultset
-                        $hasNextRowset = @$stmt->nextRowset();
-                        $this->logger?->debug('nextRowset() returned: ' . ($hasNextRowset ? 'true' : 'false'));
-                    }
-
-                } catch (Throwable $e) {
-                    // Capturar CUALQUIER error, incluidos los fatales convertidos a excepciones
-                    $this->logger?->error('Error in nextRowset loop: ' . $e->getMessage());
-                    $this->logger?->error('Error type: ' . get_class($e));
-                    $this->logger?->error('Error code: ' . $e->getCode());
-
-                    // Para SQL Server específicamente, algunos errores son normales
-                    if (strpos($e->getMessage(), 'IMSSP') !== false ||
-                        strpos($e->getMessage(), 'no more results') !== false) {
-                        $this->logger?->debug('This is a normal "no more resultsets" condition');
+                // Manejar múltiples resultsets (stored procedures)
+                while ($stmt->nextRowset()) {
+                    if ($stmt->columnCount() > 0) {
+                        $result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     }
                 }
-
-                $this->logger?->debug('Finished checking for multiple resultsets');
 
                 $multiRowset = count($result) > 1;
                 if ($multiRowset) {
@@ -269,7 +209,7 @@ class Server extends \Swoole\Server
                 }
                 $result = $multiRowset ? $result : $result[0];
                 $total = $multiRowset ? array_sum(array_map('count', $result)) : count($result);
-                $this->logger?->debug('Resultset fetched (' . $total . '). Total rows: ' . $total);
+                $this->logger?->debug('Statement have resultset with: ' . $total. ' rows');
             } else {
                 $this->logger?->debug('Statement have no resultset: ' . $stmt->rowCount());
                 // Para consultas sin resultados
@@ -303,8 +243,8 @@ class Server extends \Swoole\Server
                 'total' => $total
             ];
 
-            if (isset($multiRowset)) {
-                $response['multiRowset'] = $multiRowset;
+            if ($multiRowset) {
+                $response['multiRowset'] = true;
                 $response['resultsets'] = count($result);
             }
 
