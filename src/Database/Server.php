@@ -173,7 +173,7 @@ class Server extends \Swoole\Server
             throw new ConnectionException(sprintf(ExceptionDefinitions::POOL_NOT_FOUND->value, $builder->getMetadataValue('connection')), 500);
         }
         try {
-            $stmt = $conn->prepare($builder->getStatement());
+            $stmt = $conn->prepare($builder->getStatement(), [PDO::SQLSRV_ATTR_CURSOR_SCROLL_TYPE => PDO::SQLSRV_CURSOR_BUFFERED]);
             $this->logger?->debug('Statement generado: ' . $builder->getPrettyStatement());
             foreach ($builder->getBindings() as $key => $value) {
                 $this->logger?->debug('Binding: ' . $key . ' => ' . $value);
