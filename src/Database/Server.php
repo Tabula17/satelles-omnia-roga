@@ -195,7 +195,7 @@ class Server extends \Swoole\Server
             if ($descriptor->canHaveResultset() || $stmt->columnCount() > 0) {
                 $this->logger?->debug('Statement have resultset: FETCHING');
                 $result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
+                $this->logger?->debug('Resultset fetched. Checking for multiple resultsets');
                 // Manejar múltiples resultsets (stored procedures)
                 while ($stmt->nextRowset()) {
                     if ($stmt->columnCount() > 0) {
