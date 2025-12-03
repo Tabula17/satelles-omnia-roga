@@ -195,18 +195,32 @@ class Server extends \Swoole\Server
             $result = [];
             if ($descriptor->canHaveResultset() || $stmt->columnCount() > 0) {
                 $this->logger?->debug('Statement have resultset: FETCHING');
-                $result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                $this->logger?->debug("Resultset fetched (" . count($result[0]) . "). Checking for multiple resultsets");
+
+
+                //$result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $firstResultset = [];
+                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    $firstResultset[] = $row;
+                }
+                $result[] = $firstResultset;
+                $this->logger?->debug('Resultset fetched (' . count($firstResultset) . ') with while loop');
+
+                //$this->logger?->debug("Resultset fetched (" . count($result[0]) . "). Checking for multiple resultsets");
                 // Manejar múltiples resultsets (stored procedures)
                 $this->logger?->debug('BEFORE nextRowset - Statement is ' . ($stmt ? 'alive' : 'null'));
                 $this->logger?->debug('BEFORE nextRowset - Column count: ' . $stmt->columnCount());
                 $this->logger?->debug('  - NextRowset supported: ' . method_exists($stmt, 'nextRowset'));
                 try {
-                    while ($stmt->nextRowset()) {
+                    while (@$stmt->nextRowset()) {
                         $this->logger?->debug('Checking for next resultset');
                         if ($stmt->columnCount() > 0) {
                             $this->logger?->debug('Next resultset found, fetching.');
-                            $result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                            $resultset = [];
+                            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                                $resultset[] = $row;
+                            }
+                            $result[] = $resultset;
+                           // $result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         }
                     }
                 } catch (PDOException $e) {
