@@ -121,12 +121,13 @@ class Server extends \Swoole\Server
      * @param string $message Mensaje de error
      * @return void
      */
-    private function sendError(Server $server, int $fd, string $message): void
+    private function sendError(Server $server, int $fd, string $message, ?array $data = []): void
     {
         try {
             $this->sendResponse($server, $fd, [
                 'status' => 'error',
-                'message' => $message
+                'message' => $message,
+                'data' => $data
             ]);
         } catch (\Throwable $e) {
             $server->logger?->error($e->getMessage());
@@ -241,14 +242,16 @@ class Server extends \Swoole\Server
             $server->sendResponse($server, $fd, $response);
 
         } catch (\Throwable $e) {
-            $server->db_logger?->error($builder->getPrettyStatement(), [
+            $env = [
                 'error' => $e->getMessage(),
                 'connection' => $server->connector->getPoolStats($builder->getMetadataValue('connection')),
                 'bindings' => $builder->getBindings(),
                 'requiredParams' => $builder->getRequiredParams() ?? [],
                 'request' => $request->toArray()
-            ]);
-            throw $e;
+            ];
+            $server->db_logger?->error($builder->getPrettyStatement(),$env);
+            //throw $e;
+            $this->sendError($server, $fd, $e->getMessage(), $env);
         } finally {
             $server->connector->putConnection($conn);
         }
