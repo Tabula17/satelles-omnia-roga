@@ -34,9 +34,10 @@ try {
     $loader = new XmlFile(baseDir: __DIR__ . DIRECTORY_SEPARATOR . 'Xml', cacheManager: $cacheManager);
 
 //$xml = 'SELECT/Complex';
-$xml = 'SELECT/Basic';
+//$xml = 'SELECT/Basic';
 //$xml = 'SELECT/Union';
 //$xml = 'EXEC/SPSqlServer';
+$xml = 'EXEC/Expedicion';
 //$xml = 'INSERT/Basic';
 //$xml = 'INSERT/FromSelect';
     $member = 'allowed';
@@ -56,6 +57,7 @@ $xml = 'SELECT/Basic';
         ':param_name_to_bind_04' => 99,
         ':param_name_to_bind_05' => 7812,
         ':param_name_to_bind_06' => 456,
+        ':subinventarios' => '397'
     ];
 
     $builder = new StatementBuilder(

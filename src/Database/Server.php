@@ -239,6 +239,16 @@ class Server extends \Swoole\Server
             }
 
             $server->sendResponse($server, $fd, $response);
+
+        } catch (\Throwable $e) {
+            $server->db_logger?->error($builder->getPrettyStatement(), [
+                'error' => $e->getMessage(),
+                'connection' => $server->connector->getPoolStats($builder->getMetadataValue('connection')),
+                'bindings' => $builder->getBindings(),
+                'requiredParams' => $builder->getRequiredParams() ?? [],
+                'request' => $request->toArray()
+            ]);
+            throw $e;
         } finally {
             $server->connector->putConnection($conn);
         }
