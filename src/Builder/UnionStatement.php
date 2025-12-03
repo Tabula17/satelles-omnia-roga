@@ -85,6 +85,9 @@ class UnionStatement implements StatementProcessorInterface
 
     public function setValue(string $placeholder, mixed $value): UnionStatement
     {
+        if (!str_starts_with($placeholder, ':')) {
+            $placeholder = ':' . $placeholder;
+        }
         $this->values[$placeholder] = $value;
         if (isset($this->params[$placeholder])) {
             $this->params[$placeholder]->setValue($value);

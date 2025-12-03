@@ -265,6 +265,9 @@ class SelectStatement implements StatementProcessorInterface
 
     public function setValue(string $placeholder, mixed $value): SelectStatement
     {
+        if (!str_starts_with($placeholder, ':')) {
+            $placeholder = ':' . $placeholder;
+        }
         if (isset($this->params[$placeholder])) {
             $this->values[$placeholder] = $value;
             $this->params[$placeholder]->setValue($value);

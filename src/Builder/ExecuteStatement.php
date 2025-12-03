@@ -107,6 +107,9 @@ class ExecuteStatement implements StatementProcessorInterface
 
     public function setValue(string $placeholder, mixed $value): ExecuteStatement
     {
+        if (!str_starts_with($placeholder, ':')) {
+            $placeholder = ':' . $placeholder;
+        }
         $this->values[$placeholder] = $value;
         if (isset($this->params[$placeholder])) {
             $this->params[$placeholder]->setValue($value);
