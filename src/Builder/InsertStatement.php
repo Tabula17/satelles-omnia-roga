@@ -141,7 +141,9 @@ class InsertStatement implements StatementProcessorInterface
 
     public function setValues(array $values): InsertStatement
     {
-        $this->values = $values;
+        foreach ($values as $placeholder => $value) {
+            $this->setValue($placeholder, $value);
+        }
         return $this;
     }
 

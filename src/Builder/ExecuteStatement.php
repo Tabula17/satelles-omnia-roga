@@ -99,9 +99,12 @@ class ExecuteStatement implements StatementProcessorInterface
     {
         return $this->bindings;
     }
+
     public function setValues(array $values): ExecuteStatement
     {
-        $this->values = $values;
+        foreach ($values as $placeholder => $value) {
+            $this->setValue($placeholder, $value);
+        }
         return $this;
     }
 
