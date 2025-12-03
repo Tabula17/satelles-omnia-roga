@@ -197,6 +197,8 @@ class Server extends \Swoole\Server
                 $result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 $this->logger?->debug("Resultset fetched (" . count($result[0]) . "). Checking for multiple resultsets");
                 // Manejar múltiples resultsets (stored procedures)
+                $this->logger?->debug('BEFORE nextRowset - Statement is ' . ($stmt ? 'alive' : 'null'));
+                $this->logger?->debug('BEFORE nextRowset - Column count: ' . $stmt->columnCount());
                 while ($stmt->nextRowset()) {
                     $this->logger?->debug('Checking for next resultset');
                     if ($stmt->columnCount() > 0) {
