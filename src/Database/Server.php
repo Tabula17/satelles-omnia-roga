@@ -4,6 +4,7 @@ namespace Tabula17\Satelles\Omnia\Roga\Database;
 
 use JsonException;
 use PDO;
+use PDOException;
 use Psr\Log\LoggerInterface;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConnectionException;
@@ -199,13 +200,20 @@ class Server extends \Swoole\Server
                 // Manejar múltiples resultsets (stored procedures)
                 $this->logger?->debug('BEFORE nextRowset - Statement is ' . ($stmt ? 'alive' : 'null'));
                 $this->logger?->debug('BEFORE nextRowset - Column count: ' . $stmt->columnCount());
-                while ($stmt->nextRowset()) {
-                    $this->logger?->debug('Checking for next resultset');
-                    if ($stmt->columnCount() > 0) {
-                        $this->logger?->debug('Next resultset found, fetching.');
-                        $result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                try {
+                    while ($stmt->nextRowset()) {
+                        $this->logger?->debug('Checking for next resultset');
+                        if ($stmt->columnCount() > 0) {
+                            $this->logger?->debug('Next resultset found, fetching.');
+                            $result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                        }
                     }
+                } catch (PDOException $e) {
+                    // SQL Server puede lanzar excepción cuando no hay más resultsets
+                    $this->logger?->debug('No more resultsets or nextRowset() error: ' . $e->getMessage());
+                    // Esto es normal, continuar
                 }
+
                 $multiRowset = count($result) > 1;
                 if ($multiRowset) {
                     $this->logger?->debug('Statement have multiple resultsets: ' . count($result));
