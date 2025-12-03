@@ -173,12 +173,15 @@ class Server extends \Swoole\Server
         }
         try {
             $stmt = $conn->prepare($builder->getStatement());
+            $this->logger?->debug('Statement generado: ' . $builder->getPrettyStatement());
             foreach ($builder->getBindings() as $key => $value) {
+                $this->logger?->debug('Binding: ' . $key . ' => ' . $value);
                 $stmt->bindValue($key, $value, $builder->getParamType($key)); //bindValue($key, $value);
             }
             try {
                 $stmt->execute();
             } catch (\Throwable $e) {
+                $this->logger?->error('Error executing statement: ' . $e->getMessage());
                 $server->db_logger?->error($builder->getPrettyStatement(), [
                     'error' => $e->getMessage(),
                     'connection' => $server->connector->getPoolStats($builder->getMetadataValue('connection')),
@@ -190,6 +193,7 @@ class Server extends \Swoole\Server
             }
             $result = [];
             if ($descriptor->canHaveResultset() || $stmt->columnCount() > 0) {
+                $this->logger?->debug('Statement have resultset: FETCHING');
                 $result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                 // Manejar múltiples resultsets (stored procedures)
@@ -200,9 +204,13 @@ class Server extends \Swoole\Server
                 }
 
                 $multiRowset = count($result) > 1;
+                if ($multiRowset) {
+                    $this->logger?->debug('Statement have multiple resultsets: ' . count($result));
+                }
                 $result = $multiRowset ? $result : $result[0];
                 $total = $multiRowset ? array_sum(array_map('count', $result)) : count($result);
             } else {
+                $this->logger?->debug('Statement have no resultset: ' . $stmt->rowCount());
                 // Para consultas sin resultados
                 $affectedRows = $stmt->rowCount();
 
@@ -249,7 +257,7 @@ class Server extends \Swoole\Server
                 'requiredParams' => $builder->getRequiredParams() ?? [],
                 'request' => $request->toArray()
             ];
-            $server->db_logger?->error($builder->getPrettyStatement(),$env);
+            $server->db_logger?->error($builder->getPrettyStatement(), $env);
             //throw $e;
             $this->sendError($server, $fd, $e->getMessage(), $env);
         } finally {
