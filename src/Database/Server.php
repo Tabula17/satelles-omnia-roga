@@ -207,6 +207,15 @@ class Server extends \Swoole\Server
                 try {
                     $this->logger?->debug('Attempting first nextRowset()');
 
+/*                    [2025-12-03T20:39:19.964018+00:00] db-bridge.DEBUG: Statement have resultset: FETCHING [] []
+                    [2025-12-03T20:39:20.034743+00:00] db-bridge.DEBUG: Resultset fetched (45). Checking for multiple resultsets [] []
+                    [2025-12-03T20:39:20.034903+00:00] db-bridge.DEBUG: BEFORE nextRowset - Statement is alive [] []
+                    [2025-12-03T20:39:20.034982+00:00] db-bridge.DEBUG: BEFORE nextRowset - Column count: 42 [] []
+                    [2025-12-03T20:39:20.035040+00:00] db-bridge.DEBUG: Attempting first nextRowset() [] []
+                    [2025-12-03T20:39:20.035243+00:00] db-bridge.DEBUG: nextRowset() returned: false [] []
+                    [2025-12-03T20:39:20.035448+00:00] db-bridge.DEBUG: nextRowset error info: ["00000",null,null] [] []
+                    [2025-12-03T20:39:20.035586+00:00] db-bridge.DEBUG: Finished checking for multiple resultsets [] []*/
+
                     // Usar nextRowset() de manera diferente para SQL Server
                     $hasNextRowset = @$stmt->nextRowset(); // Usar @ para suprimir warnings
 
@@ -260,6 +269,7 @@ class Server extends \Swoole\Server
                 }
                 $result = $multiRowset ? $result : $result[0];
                 $total = $multiRowset ? array_sum(array_map('count', $result)) : count($result);
+                $this->logger?->debug('Resultset fetched (' . $total . '). Total rows: ' . $total);
             } else {
                 $this->logger?->debug('Statement have no resultset: ' . $stmt->rowCount());
                 // Para consultas sin resultados
