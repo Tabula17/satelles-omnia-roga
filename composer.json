@@ -41,6 +41,7 @@
     "swoole/ide-helper": "@dev"
   },
   "suggest": {
+    "ext-sockets": "Sockets extension for TCP/UDP connections",
     "ext-redis": "Redis extension for caching",
     "ext-memcached": "Memcached extension for caching",
     "monolog/monolog": "Logging"
