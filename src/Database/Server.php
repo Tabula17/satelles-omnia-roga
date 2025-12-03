@@ -206,7 +206,6 @@ class Server extends \Swoole\Server
                         $result[] = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     }
                 }
-
                 $multiRowset = count($result) > 1;
                 if ($multiRowset) {
                     $this->logger?->debug('Statement have multiple resultsets: ' . count($result));
