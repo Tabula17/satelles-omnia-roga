@@ -31,7 +31,7 @@ class XmlStatements implements LoaderStorageInterface
 
     public function __construct(
         string                            $baseDir,
-        private(set)                      readonly ?CacheManagerInterface $cacheManager = null,
+        private(set) readonly ?CacheManagerInterface $cacheManager = null,
         private readonly ?LoggerInterface $logger = null)
     {
         $this->baseDir = $baseDir;
@@ -80,20 +80,21 @@ class XmlStatements implements LoaderStorageInterface
             $collection = $loader->getStatementCollection($name, true);
             $variants = $collection->availableVariantsByMetadata($variant);
             foreach ($variants as $variantValue) {
-                $this->logger?->debug("Processing variant $variant ". var_export($variantValue, true));
+                $this->logger?->debug("Processing variant $variant " . var_export($variantValue, true));
                 //foreach ($variantValue as $value) {
-                    $desc = $builder->loadStatementBy($variant, $variantValue);
-                    if ($desc instanceof StatementBuilder) {
-                        $descriptors[] = [
-                            'params' => [
-                                'required' => $desc->getRequiredParams(),
-                                'optional' => $desc->getOptionalParams(),
-                                'bindings' => $desc->getBindings()
-                            ],
-                            'metadata' => $desc->getMetadata() ?? [],
+                $desc = $builder->loadStatementBy($variant, $variantValue);
+                if ($desc instanceof StatementBuilder) {
+                    $descriptors[] = [
+                        'type' => (string)$desc->getStatementType(),
+                        'metadata' => $desc->getMetadata() ?? [],
+                        'params' => [
+                            'required' => $desc->getRequiredParams(),
+                            'optional' => $desc->getOptionalParams(),
+                            'bindings' => $desc->getBindings()
+                        ],
 
-                        ];
-                    }
+                    ];
+                }
                 //}
             }
 
