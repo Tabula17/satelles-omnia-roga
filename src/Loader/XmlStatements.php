@@ -28,9 +28,9 @@ class XmlStatements implements LoaderStorageInterface
     }
 
     public function __construct(
-        string                            $baseDir,
-        private                           (set) readonly ?CacheManagerInterface $cacheManager = null,
-        private readonly ?LoggerInterface $logger = null)
+        string                                  $baseDir,
+        private(set) readonly ?CacheManagerInterface $cacheManager = null,
+        private readonly ?LoggerInterface       $logger = null)
     {
         $this->baseDir = $baseDir;
         $this->logger?->info("XML statements directory: $baseDir");
