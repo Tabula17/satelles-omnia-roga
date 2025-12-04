@@ -46,8 +46,11 @@ class StatementCollection extends GenericCollection
 
     public function availableVariantsByMetadata(string $member): array
     {
-        return array_unique(array_map(static function ($descriptor) use ($member) {
-            return $descriptor->metadata->{$member};
-        }, $this->values));
+        return array_filter(array_unique(array_map(static function ($descriptor) use ($member) {
+            if($descriptor->metadata->offsetExists($member)) {
+                return $descriptor->metadata->{$member};
+            }
+            return null;
+        }, $this->values)));
     }
 }
