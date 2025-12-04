@@ -191,12 +191,13 @@ class StatementBuilder
         return $this->processor?->__toString();
     }
 
-    public function getPrettyStatement()
+    public function getPrettyStatement(): ?string
     {
         if (isset($this->processor)) {
             $this->processor->prettyPrint = true;
             return $this->processor?->__toString();
         }
+        return null;
     }
 
     public function removeValue(string $placeholder): void
@@ -207,5 +208,9 @@ class StatementBuilder
     public function getValues()
     {
         return $this->processor->values;
+    }
+    public function getStatementType(): string
+    {
+        return $this->descriptor->type;
     }
 }
