@@ -43,9 +43,9 @@ class Bridge
     }
 
     /**
-     * @throws ConnectionException
+     * @throws ConnectionException|\JsonException
      */
-    public function request(string $config, array $params = [], bool $forceReload = false, int $allowed = 2): array
+    public function request(array $params): array
     {
         if (!$this->client->connect($this->host, $this->port, 5.0)) {
             throw new ConnectionException(
@@ -54,12 +54,7 @@ class Bridge
             );
         }
 
-        $payload = json_encode([
-            'forceReload' => $forceReload,
-            'cfg' => $config,
-            'allowed' => $allowed,
-            'params' => $params
-        ]);
+        $payload = json_encode($params, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
 
         if (!$this->client->send($payload)) {
             $this->client->close();
