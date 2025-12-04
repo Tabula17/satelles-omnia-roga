@@ -75,7 +75,7 @@ class XmlStatements implements LoaderStorageInterface
             loader: $loader,
             reload: true
         );
-        $variants = [];
+        $descriptors = [];
         foreach (StatementCollection::$metadataVariantKeywords as $variant) {
             $collection = $loader->getStatementCollection($name, true);
             $variants = $collection->availableVariantsByMetadata($variant);
@@ -84,7 +84,7 @@ class XmlStatements implements LoaderStorageInterface
                 foreach ($variantValue as $value) {
                     $desc = $builder->loadStatementBy($variant, $value);
                     if ($desc instanceof StatementBuilder) {
-                        $variants[] = [
+                        $descriptors[] = [
                             'params' => [
                                 'required' => $desc->getRequiredParams(),
                                 'optional' => $desc->getOptionalParams(),
@@ -101,7 +101,7 @@ class XmlStatements implements LoaderStorageInterface
 
         return [
             'cfg' => $name,
-            'variants' => $variants,
+            'variants' => $descriptors,
             'metadata' => $builder->getMetadata() ?? [],
             'cached' => $this->cacheManager?->has($name) ?? false
         ];
