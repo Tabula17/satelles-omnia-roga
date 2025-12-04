@@ -6,6 +6,8 @@ use Psr\Log\LoggerInterface;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RegexIterator;
+use Tabula17\Satelles\Omnia\Roga\Builder\StatementProcessorInterface;
+use Tabula17\Satelles\Omnia\Roga\Collection\StatementCollection;
 use Tabula17\Satelles\Omnia\Roga\Exception\ExceptionDefinitions;
 use Tabula17\Satelles\Omnia\Roga\Exception\InvalidArgumentException;
 use Tabula17\Satelles\Omnia\Roga\LoaderInterface;
@@ -28,9 +30,9 @@ class XmlStatements implements LoaderStorageInterface
     }
 
     public function __construct(
-        string                                  $baseDir,
-        private(set) readonly ?CacheManagerInterface $cacheManager = null,
-        private readonly ?LoggerInterface       $logger = null)
+        string                            $baseDir,
+        private                           (set) readonly ?CacheManagerInterface $cacheManager = null,
+        private readonly ?LoggerInterface $logger = null)
     {
         $this->baseDir = $baseDir;
         $this->logger?->info("XML statements directory: $baseDir");
@@ -67,18 +69,37 @@ class XmlStatements implements LoaderStorageInterface
      */
     public function getStatementInfo(string $name): array
     {
+        $loader = $this->getLoader();
         $builder = new StatementBuilder(
             statementName: $name,
-            loader: $this->getLoader(),
+            loader: $loader,
             reload: true
         );
+        $variants = [];
+        foreach (StatementCollection::$metadataVariantKeywords as $variant) {
+            $collection = $loader->getStatementCollection($name, true)?->{$variant}();
+            if ($collection instanceof StatementCollection) {
+                $variants = $collection->availableVariantsByMetadata($variant);
+                foreach ($variants as $variantName => $variantValue) {
+                    $desc = $builder->loadStatementBy($variant, $variantValue);
+                    if ($desc instanceof StatementBuilder) {
+                        $variants[] = [
+                            'params' => [
+                                'required' => $desc->getRequiredParams(),
+                                'optional' => $desc->getOptionalParams(),
+                                'bindings' => $desc->getBindings()
+                            ],
+                            'metadata' => $desc->getMetadata() ?? [],
+
+                        ];
+                    }
+                }
+            }
+        }
+
         return [
             'cfg' => $name,
-            'params' => [
-                'required' => $builder->getRequiredParams(),
-                'optional' => $builder->getOptionalParams(),
-                'bindings' => $builder->getBindings()
-            ],
+            'variants' => $variants,
             'metadata' => $builder->getMetadata() ?? [],
             'cached' => $this->cacheManager?->has($name) ?? false
         ];

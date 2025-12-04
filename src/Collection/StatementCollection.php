@@ -7,6 +7,13 @@ use Tabula17\Satelles\Utilis\Collection\GenericCollection;
 
 class StatementCollection extends GenericCollection
 {
+    public static array $metadataVariantKeywords = [
+        'client',
+        'clients',
+        'variant',
+        'variants',
+        'allowed'
+    ];
 
     public function __construct(StatementDescriptor ...$descriptor)
     {
