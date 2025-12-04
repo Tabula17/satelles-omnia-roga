@@ -6,6 +6,11 @@ namespace Tabula17\Satelles\Omnia\Roga\Database;
 use Swoole\Client;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConnectionException;
 
+/**
+ * The Bridge class acts as a connector to a remote server using Swoole TCP
+ * client for high-performance network communication. This class is designed to
+ * send requests to the server with JSON payloads and handle responses efficiently.
+ */
 class Bridge
 {
     private Client $client;
