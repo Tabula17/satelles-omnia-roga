@@ -80,6 +80,7 @@ class XmlStatements implements LoaderStorageInterface
             $collection = $loader->getStatementCollection($name, true);
             $variants = $collection->availableVariantsByMetadata($variant);
             foreach ($variants as $variantValue) {
+                $this->logger?->debug("Processing variant $variant ". var_export($variantValue, true));
                 $desc = $builder->loadStatementBy($variant, $variantValue);
                 if ($desc instanceof StatementBuilder) {
                     $variants[] = [
