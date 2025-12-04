@@ -48,7 +48,7 @@ class XmlStatements implements LoaderStorageInterface
             '/\.xml$/i',
             RegexIterator::MATCH
         );
-        return array_map(fn($file) => str_replace([$this->baseDir . DIRECTORY_SEPARATOR, '.xml'], '', $file->getPathname()), iterator_to_array($xmlFiles));
+        return array_values(array_map(fn($file) => str_replace([$this->baseDir . DIRECTORY_SEPARATOR, '.xml'], '', $file->getPathname()), iterator_to_array($xmlFiles)));
     }
 
     public function getLoader(): LoaderInterface
