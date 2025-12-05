@@ -6,7 +6,6 @@ use Psr\Log\LoggerInterface;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RegexIterator;
-use Tabula17\Satelles\Omnia\Roga\Builder\StatementProcessorInterface;
 use Tabula17\Satelles\Omnia\Roga\Collection\StatementCollection;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
 use Tabula17\Satelles\Omnia\Roga\Exception\ExceptionDefinitions;
@@ -16,6 +15,12 @@ use Tabula17\Satelles\Omnia\Roga\LoaderStorageInterface;
 use Tabula17\Satelles\Omnia\Roga\StatementBuilder;
 use Tabula17\Satelles\Utilis\Cache\CacheManagerInterface;
 
+/**
+ * Class XmlStatements
+ *
+ * Implements the LoaderStorageInterface to manage XML statements within a specified directory.
+ * This class provides functionality to list, load, cache, and clear cache for XML-based statements.
+ */
 class XmlStatements implements LoaderStorageInterface
 {
     private(set) string $baseDir {

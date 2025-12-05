@@ -2,8 +2,6 @@
 
 namespace Tabula17\Satelles\Omnia\Roga;
 
-use Psr\Log\LoggerInterface;
-use Tabula17\Satelles\Omnia\Roga\Builder\DataTypes;
 use Tabula17\Satelles\Omnia\Roga\Builder\DeleteStatement;
 use Tabula17\Satelles\Omnia\Roga\Builder\ExecuteStatement;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expression;
@@ -56,7 +54,7 @@ class StatementBuilder
         return $this->descriptor;
     }
 
-    public function getAllDescriptors()
+    public function getAllDescriptors(): array
     {
         return $this->collection->toArray();
     }
@@ -67,10 +65,11 @@ class StatementBuilder
      * @param string $member The name of the metadata member to search for.
      * @param mixed $value The corresponding value of the metadata member.
      *
-     * @return StatementProcessorInterface|null Returns the respective statement object
+     * @return StatementBuilder Returns the respective statement object
      *         (SelectStatement, InsertStatement, UpdateStatement, DeleteStatement, or ExecuteStatement)
      *         based on the descriptor type, or null if no matching descriptor is found.
      * @throws ConfigException
+     * @throws RuntimeException
      */
     public function loadStatementBy(string $member, mixed $value): self
     {
@@ -199,7 +198,6 @@ class StatementBuilder
         }
         return null;
     }
-
     public function removeValue(string $placeholder): void
     {
         $this->processor?->removeValue($placeholder);
@@ -209,6 +207,12 @@ class StatementBuilder
     {
         return $this->processor->values;
     }
+
+    /**
+     * Retrieves the type of the statement from the descriptor.
+     *
+     * @return string The type of the statement.
+     */
     public function getStatementType(): string
     {
         return $this->descriptor->type;

@@ -7,11 +7,15 @@ use Tabula17\Satelles\Utilis\Collection\GenericCollection;
 
 class StatementCollection extends GenericCollection
 {
+    /**
+     * An array containing specific metadata variant keywords used for processing.
+     * Unused or commented keywords are provided for reference or future use.
+     */
     public static array $metadataVariantKeywords = [
         'client',
-        'clients',
+        //'clients',
         'variant',
-        'variants',
+        //'variants',
         'allowed'
     ];
 

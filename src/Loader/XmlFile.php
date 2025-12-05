@@ -29,13 +29,6 @@ class XmlFile implements LoaderInterface
             $this->baseDir = realpath($value);
         }
     }
-    public array $variantsMembers = [
-        'client',
-        'clients',
-        'variant',
-        'variants',
-        'allowed',
-    ];
 
     /**
      */
@@ -206,7 +199,7 @@ class XmlFile implements LoaderInterface
             foreach ($statements as $statement) {
                 $subsDetectedByKey = ArrayUtilities::getArrayPathsByKey($statement, 'subquery');
                 $descriptorClass = Descriptors::fromName($statement['type'] ?? 'select');
-                $variants = array_intersect_key($statement['metadata'], array_flip($this->variantsMembers));
+                $variants = array_intersect_key($statement['metadata'], array_flip(StatementCollection::$metadataVariantKeywords));
                 $subqueriesForPath = [];
                 if (!empty($subsDetectedByKey)) {
                     foreach ($subsDetectedByKey as $subqueryPath) {
