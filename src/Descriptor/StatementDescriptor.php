@@ -35,7 +35,7 @@ class StatementDescriptor extends AbstractDescriptor
     }
     public function getOperations(): array
     {
-        return $this->metadata?->availableOperations;
+        return $this->metadata?->getAvailableOperations();
     }
 
 }

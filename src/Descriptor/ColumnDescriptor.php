@@ -8,77 +8,15 @@ use Tabula17\Satelles\Omnia\Roga\Collection\ParamCollection;
 use Tabula17\Satelles\Utilis\Config\AbstractDescriptor;
 
 /**
- *  Ejemplo de columna:
- *  <column>
- *      <name>Diametro</name> <!-- NOMBRE DE LA COLUMNA -->
- *      <alias>diametro</alias> <!-- ALIAS DE LA COLUMNA -->
- *      <type>int</type> <!-- TIPO DE DATO -->
- *      <visible>1</visible> <!-- Columna incluida en la consulta -->
- *      <sqlexpression>sum</sqlexpression> <!-- Función A APLICAR a la columna -->
- *      <arguments> <!-- Argumentos extras a aplicar en la función -->
- *           <argument>'PROPIO'</argument>
- *      </arguments>
- *      <excludecolname>1</excludecolname> <!-- Columna excluida al pasar argumentos a la función. No se utiliza el miembro "name" en este caso. Pensada para columnas generadas desde funciones personalizadas -->
- *      <grouped>1</grouped> <!-- Columna agrupada -->
- *      <literal>1</literal> <!-- Columna literal ( no se procesa, se utiliza el string pasado en "name" como expresión SQL. Recomendado en casos complejos donde no es necesario pasar argumentos por parámetros  ) -->
- *      <quoteliteral>1</quoteliteral> <!-- Columna literal ( no se procesa, se utiliza el string pasado en "name" y se encierra entre comillas) -->
- *      <param> <!-- Columna parametrizada, se procesas mediante la clase 'Param' y genera expresiones dentro del WHERE -->
- *          <name>cod_deposito</name>
- *          <type>int</type>
- *          <sqlexpression>eq</sqlexpression>
- *      </param>
- *      <order> <!-- Columna ordenada, se procesas mediante la clase 'Order' y genera expresiones dentro del ORDER BY -->
- *          <position>1</position>
- *          <direction>DESC</direction>
- *      </order>
- *  </column>
- *  Ejemplo de columna con subconsulta (Este ejemplo debe preprocesar la subconsulta):
- *  <column>
- *      <subqueriesForPath> <!-- Columna de subconsulta, procesa el descriptor de la subconsulta y lo devuelve como expresión SQL en la columna -->
- *          <cfg>Cp.maquina.parada.Motivo</cfg>
- *          <arguments> <!-- Argumentos extras a aplicar en la subconsulta -->
- *              <externalJoinGrupo>gmp.cod_grupo_motivos</externalJoinGrupo>
- *          </arguments>
- *      </subqueriesForPath>
- *      <alias>diametro</alias> <!-- ALIAS DE LA COLUMNA -->
- *      <visible>1</visible> <!-- Columna incluida en la consulta -->
- *      <sqlexpression>sum</sqlexpression> <!-- Función A APLICAR a la columna -->
- *      <arguments> <!-- Argumentos extras a aplicar en la función -->
- *          <argument>'PROPIO'</argument>
- *      </arguments>
- *      <grouped>1</grouped> <!-- Columna agrupada -->
- *      <param> <!-- Columna parametrizada, se procesas mediante la clase 'Param' y genera expresiones dentro del WHERE -->
- *          <name>cod_deposito</name>
- *          <type>int</type>
- *          <sqlexpression>eq</sqlexpression>
- *      </param>
- *      <order> <!-- Columna ordenada, se procesas mediante la clase 'Order' y genera expresiones dentro del ORDER BY -->
- *          <position>1</position>
- *          <direction>DESC</direction>
- *      </order>
- *   </column>
- *   Ejemplo de columna con template:
- *   <column>
- *      <name>Diametro</name> <!-- NOMBRE DE LA COLUMNA -->
- *      <template>TRUNC(:colname)</template>
- *      <alias>diametro</alias> <!-- ALIAS DE LA COLUMNA -->
- *      <visible>1</visible> <!-- Columna incluida en la consulta -->
- *      <sqlexpression>sum</sqlexpression> <!-- Función A APLICAR a la columna -->
- *      <arguments> <!-- Argumentos extras a aplicar en la función -->
- *           <argument>'PROPIO'</argument>
- *      </arguments>
- *      <excludecolname>1</excludecolname> <!-- Columna excluida al pasar argumentos a la función -->
- *      <grouped>1</grouped> <!-- Columna agrupada -->
- *      <param> <!-- Columna parametrizada, se procesas mediante la clase 'Param' y genera expresiones dentro del WHERE -->
- *           <name>cod_deposito</name>
- *           <type>int</type>
- *           <sqlexpression>eq</sqlexpression>
- *      </param>
- *      <order> <!-- Columna ordenada, se procesas mediante la clase 'Order' y genera expresiones dentro del ORDER BY -->
- *           <position>1</position>
- *           <direction>DESC</direction>
- *      </order>
- *    </column>
+ * Represents a column descriptor in a database query or data structure.
+ *
+ * This class is used to define and handle the properties and behaviors of a database column,
+ * including its name, type, alias, visibility, and specific behaviors such as handling
+ * subqueries, parameters, conditions, and order definitions.
+ *
+ * Properties are protected and can only be modified within the class and via specific set methods.
+ * Several properties support accepting different input types such as arrays, which are then
+ * processed and instantiated as specific objects.
  */
 final class ColumnDescriptor extends AbstractDescriptor
 {

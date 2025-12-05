@@ -19,11 +19,21 @@ class StatementCollection extends GenericCollection
         'allowed'
     ];
 
+    /**
+     * @param StatementDescriptor ...$descriptor
+     */
     public function __construct(StatementDescriptor ...$descriptor)
     {
         $this->values = $descriptor;
     }
 
+    /**
+     * Retrieves a statement descriptor from a collection based on the provided metadata key and value.
+     *
+     * @param string $member The metadata key used to filter descriptors.
+     * @param mixed $value The metadata value to match against the specified key.
+     * @return StatementDescriptor|null Returns the matching descriptor if found, or null otherwise.
+     */
     public function getDescriptorByMetadata(string $member, mixed $value): ?StatementDescriptor
     {
         return array_find($this->values, static function ($descriptor) use ($member, $value) {
@@ -48,6 +58,12 @@ class StatementCollection extends GenericCollection
         });
     }
 
+    /**
+     * Retrieves an array of unique metadata values associated with the given member from the descriptors.
+     *
+     * @param string $member The metadata key to look for in the descriptors.
+     * @return array An array of unique metadata values for the specified member.
+     */
     public function availableVariantsByMetadata(string $member): array
     {
         return array_filter(array_unique(array_map(static function ($descriptor) use ($member) {

@@ -5,6 +5,13 @@ namespace Tabula17\Satelles\Omnia\Roga\Descriptor;
 use Tabula17\Satelles\Omnia\Roga\Collection\ColumnCollection;
 use Tabula17\Satelles\Utilis\Config\AbstractDescriptor;
 
+/**
+ * Represents the descriptor for a database table, which includes metadata such as
+ * the table name, its alias, associated columns, subqueries, and other properties.
+ *
+ * This class simplifies the mapping of database table definitions and their associated
+ * attributes, allowing for handling various use cases such as aliasing, quoting, and subqueries.
+ */
 class TableDescriptor extends AbstractDescriptor
 {
     protected(set) string $name {

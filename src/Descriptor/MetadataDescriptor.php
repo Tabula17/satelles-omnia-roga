@@ -5,22 +5,13 @@ namespace Tabula17\Satelles\Omnia\Roga\Descriptor;
 use Tabula17\Satelles\Utilis\Config\AbstractDescriptor;
 
 /**
- * 'metadata' => [
- * 'connection' => 'sql1',
- * 'operation' => 'select',
- * 'forClients' => [], // ex allowed plants
- * 'quoteIdentifier' => false,
- * 'version' => '1.0'
- * ],
- * 'client',
- * 'clients',
- * 'variant',
- * 'variants',
- * 'allowed',
+ * Represents a descriptor for metadata operations, providing functionality
+ * for configuring and managing supported operations, connection properties,
+ * and other related metadata attributes.
  */
 class MetadataDescriptor extends AbstractDescriptor
 {
-    private(set) array $availableOperations = ['select', 'insert', 'update', 'delete', 'execute', 'exec', 'call', 'sync'];
+    private array $availableOperations = ['select', 'insert', 'update', 'delete', 'execute', 'exec', 'call', 'sync'];
     protected(set) string $connection;
     protected(set) string $operation {
         set(string $value) {
@@ -41,5 +32,8 @@ class MetadataDescriptor extends AbstractDescriptor
     protected(set) bool $quoteIdentifier = false;
     protected(set) string $version;
 
-
+    public function getAvailableOperations(): array
+    {
+        return $this->availableOperations;
+    }
 }

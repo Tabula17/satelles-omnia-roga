@@ -2,6 +2,23 @@
 
 namespace Tabula17\Satelles\Omnia\Roga\Descriptor;
 
+/**
+ * Enum Descriptors represents a set of descriptors mapped to their corresponding class names.
+ * Each case in the enum corresponds to a specific descriptor.
+ *
+ * This enum provides a static method to retrieve descriptor values based on given names or values.
+ *
+ * The following cases are available:
+ * - SELECT
+ * - INSERT
+ * - UPDATE
+ * - UNION
+ * - EXEC
+ * - DELETE
+ *
+ * Method:
+ * - fromName(): Converts a given name or value to its corresponding descriptor value, or provides a default mapping.
+ */
 enum Descriptors: string
 {
     case SELECT = SelectDescriptor::class;
