@@ -113,11 +113,11 @@ class XmlStatements implements LoaderStorageInterface
                 if ($desc instanceof StatementBuilder) {
                     $descriptors[] = [
                         'type' => (string)$desc->getStatementType(),
+                        'variantMember' => $variant,
                         'metadata' => $desc->getMetadata() ?? [],
                         'params' => [
                             'required' => $desc->getRequiredParams(),
-                            'optional' => $desc->getOptionalParams(),
-                            'bindings' => $desc->getBindings()
+                            'optional' => $desc->getOptionalParams()
                         ],
 
                     ];
@@ -130,7 +130,6 @@ class XmlStatements implements LoaderStorageInterface
         return [
             'cfg' => $name,
             'variants' => $descriptors,
-            'metadata' => $builder->getMetadata() ?? [],
             'cached' => $this->cacheManager?->has($name) ?? false
         ];
     }
