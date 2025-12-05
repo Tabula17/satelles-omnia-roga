@@ -8,6 +8,7 @@ use RecursiveIteratorIterator;
 use RegexIterator;
 use Tabula17\Satelles\Omnia\Roga\Builder\StatementProcessorInterface;
 use Tabula17\Satelles\Omnia\Roga\Collection\StatementCollection;
+use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
 use Tabula17\Satelles\Omnia\Roga\Exception\ExceptionDefinitions;
 use Tabula17\Satelles\Omnia\Roga\Exception\InvalidArgumentException;
 use Tabula17\Satelles\Omnia\Roga\LoaderInterface;
@@ -31,7 +32,7 @@ class XmlStatements implements LoaderStorageInterface
 
     public function __construct(
         string                            $baseDir,
-        private(set) readonly ?CacheManagerInterface $cacheManager = null,
+        private                           (set) readonly ?CacheManagerInterface $cacheManager = null,
         private readonly ?LoggerInterface $logger = null)
     {
         $this->baseDir = $baseDir;
@@ -53,19 +54,40 @@ class XmlStatements implements LoaderStorageInterface
         return array_values(array_map(fn($file) => str_replace([$this->baseDir . DIRECTORY_SEPARATOR, '.xml'], '', $file->getPathname()), iterator_to_array($xmlFiles)));
     }
 
-    public function getLoader(): LoaderInterface
+    public function getLoader(bool $withCache = false): LoaderInterface
     {
-        return new XmlFile($this->baseDir, $this->cacheManager, $this->logger);
+        return new XmlFile(
+            baseDir: $this->baseDir,
+            cacheManager: $withCache ? $this->cacheManager : null,
+            logger: $this->logger);
 
     }
 
     public function clearCache(): void
     {
+        if (!$this->cacheManager) {
+            $this->logger?->warning("No cache manager available, skipping cache clear");
+            return;
+        }
         $this->cacheManager?->clear();
     }
 
+    public function clearStatementCache(string $name): void
+    {
+        if (!$this->cacheManager) {
+            $this->logger?->warning("No cache manager available, skipping cache clear for $name");
+            return;
+        }
+        if (!$this->cacheManager->has($name)) {
+            $this->logger?->warning("No cache found for $name");
+            return;
+        }
+        $this->logger?->info("Clearing cache for $name");
+        $this->cacheManager->delete($name);
+    }
+
     /**
-     * @throws \JsonException
+     * @throws \JsonException|ConfigException
      */
     public function getStatementInfo(string $name): array
     {
@@ -78,7 +100,7 @@ class XmlStatements implements LoaderStorageInterface
         $descriptors = [];
         foreach (StatementCollection::$metadataVariantKeywords as $variant) {
             $collection = $loader->getStatementCollection($name, true);
-            $variants = $collection->availableVariantsByMetadata($variant);
+            $variants = $collection?->availableVariantsByMetadata($variant);
             foreach ($variants as $variantValue) {
                 $this->logger?->debug("Processing variant $variant " . var_export($variantValue, true));
                 //foreach ($variantValue as $value) {
@@ -106,5 +128,16 @@ class XmlStatements implements LoaderStorageInterface
             'metadata' => $builder->getMetadata() ?? [],
             'cached' => $this->cacheManager?->has($name) ?? false
         ];
+    }
+
+    public function compareFromCache(string $name): bool
+    {
+        if (!$this->cacheManager) {
+            $this->logger?->warning("No cache manager available, skipping cache comparison");
+            return false;
+        }
+        $loader = $this->getLoader();
+        $loaderWithCache = $this->getLoader(true);
+        return $loader->getStatementDescriptors($name, true) === $loaderWithCache->getStatementDescriptors($name, false);
     }
 }
