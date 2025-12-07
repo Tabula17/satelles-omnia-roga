@@ -113,9 +113,16 @@ class Connector
                 size: $poolSize
             );
             $this->logger?->debug("Pool created: $effectiveName");
-            $this->pools[$effectiveName]->fill();
-            $this->logger?->debug("Pool filled: $effectiveName");
-            $this->loadedConnections->addIfNotExist($config);
+            try {
+                $this->pools[$effectiveName]->fill();
+                $this->logger?->debug("Pool filled: $effectiveName");
+                $this->loadedConnections->addIfNotExist($config);
+            }catch (\Throwable $e){
+                $this->logger?->error("Error filling pool: $effectiveName: ". $e->getMessage());
+                $this->poolCount[$config->name]--;
+                unset($this->pools[$effectiveName]);
+                $this->unreachableConnections->addIfNotExist($config);
+            }
         } else {
             $this->logger?->warning("Connection test failed: $config->name", $config->toArray());
             $this->unreachableConnections->addIfNotExist($config);
