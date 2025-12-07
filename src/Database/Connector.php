@@ -121,6 +121,7 @@ class Connector
                 $this->logger?->error("Error filling pool: $effectiveName: ". $e->getMessage());
                 $this->poolCount[$config->name]--;
                 unset($this->pools[$effectiveName]);
+                $config->setLastConnectionError($e->getMessage());
                 $this->unreachableConnections->addIfNotExist($config);
             }
         } else {
