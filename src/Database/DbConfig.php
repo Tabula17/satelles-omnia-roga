@@ -47,5 +47,9 @@ class DbConfig extends ConnectionConfig
         }
         return parent::canConnect();
     }
+    public function setLastConnectionError(string $error): void
+    {
+        $this->lastConnectionError = $error;
+    }
 
 }
