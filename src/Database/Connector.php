@@ -125,7 +125,7 @@ class Connector
                 $this->removePool($config->name);
             }
         } else {
-            $this->logger?->warning("Connection test failed: $config->name", $config->toArray());
+            $this->logger?->warning("⚠️ Connection test failed: $config->name", $config->toArray());
             $this->unreachableConnections->addIfNotExist($config);
         }
     }
@@ -135,7 +135,7 @@ class Connector
      */
     public function reloadUnreachableConnections(): void
     {
-        $this->logger?->info("Reloading unreachable connections");
+        $this->logger?->info("♻︎ Reloading unreachable connections");
         while ($this->unreachableConnections->count() > 0) {
             $this->loadConnection($this->unreachableConnections->pop());
         }
@@ -145,7 +145,7 @@ class Connector
     {
         foreach ($this->loadedConnections as $config) {
             if (!$config->canConnect()) {
-                $this->logger?->warning("Connection test failed: $config->name", $config->toArray());
+                $this->logger?->warning("🚦 Connection test failed: $config->name", $config->toArray());
                 $this->unreachableConnections->addIfNotExist($config);
                 $this->removePool($config->name);
             }
