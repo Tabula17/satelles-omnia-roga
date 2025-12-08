@@ -153,7 +153,7 @@ class Connector
         $this->logger?->info("♻︎ Reloading {$originalCount} unreachable connections (max {$maxRetries} retries)");
 
         $results = ['success' => 0, 'failed' => 0];
-
+        /* @var DbConfig $config */
         foreach ($connections as $config) {
             // Manejo de reintentos con backoff
             $retryCount = $config->metadata['retry_count'] ?? 0;
@@ -181,8 +181,8 @@ class Connector
             }
 
             // Actualizar contador de reintentos
-            $config->metadata['retry_count'] = $retryCount + 1;
-            $config->metadata['last_retry_at'] = time();
+            $config->setMetadataProperty('retry_count', $retryCount + 1);
+            $config->setMetadataProperty('last_retry_at', time());
 
             // Intentar reconexión
             $this->logger?->debug("Attempting reconnect to {$config->name} (retry #{$config->metadata['retry_count']})");
@@ -192,7 +192,7 @@ class Connector
                 $this->logger?->info("✅ Successfully reconnected to {$config->name}");
 
                 // Resetear contador de reintentos si tuvo éxito
-                unset($config->metadata['retry_count']);
+                $config->unsetMetadataProperty('retry_count');
             } else {
                 $results['failed']++;
                 $this->logger?->warning("❌ Failed to reconnect to {$config->name}", [
