@@ -11,6 +11,7 @@ use Tabula17\Satelles\Omnia\Roga\Database\Pool\PDOPoolExtended;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConnectionException;
 use Tabula17\Satelles\Omnia\Roga\Exception\ExceptionDefinitions;
 use Tabula17\Satelles\Utilis\Exception\InvalidArgumentException;
+use Throwable;
 
 /**
  * Manages a collection of database connection pools, allowing for creating,
@@ -155,7 +156,65 @@ class Connector
     {
         return $this->unreachableConnections;
     }
+    /**
+     * @return int Número de conexiones cargadas activas
+     */
+    public function getActiveConnectionsCount(): int
+    {
+        return $this->loadedConnections->count();
+    }
 
+    /**
+     * @return int Número de conexiones inalcanzables
+     */
+    public function getUnreachableCount(): int
+    {
+        return $this->unreachableConnections->count();
+    }
+
+    /**
+     * Realiza health check de todas las conexiones cargadas
+     * @return array Estadísticas del health check
+     */
+    public function performHealthCheck(): array
+    {
+        $startTime = microtime(true);
+        $checked = 0;
+        $failed = 0;
+
+        $this->healthCheckLoadedConnections();
+
+        // También intentar reconectar las inalcanzables periódicamente
+        if (time() % 300 === 0) { // Cada 5 minutos
+            try {
+                $this->reloadUnreachableConnections();
+            } catch (Throwable $e) {
+                $this->logger?->error("Error reloading unreachable connections: " . $e->getMessage());
+            }
+        }
+
+        return [
+            'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+            'checked' => $this->loadedConnections->count(),
+            'unreachable' => $this->unreachableConnections->count(),
+            'total_pools' => $this->pools->count(),
+            'timestamp' => time()
+        ];
+    }
+
+    /**
+     * @return array Estado general del connector
+     */
+    public function getHealthStatus(): array
+    {
+        return [
+            'loaded_connections' => $this->loadedConnections->count(),
+            'unreachable_connections' => $this->unreachableConnections->count(),
+            'active_pools' => $this->pools->count(),
+            'pool_groups' => array_keys($this->poolCount),
+            'timestamp' => time()
+        ];
+    }
     /**
      * Retrieves an available connection pool by its name or creates a new one if possible.
      *
