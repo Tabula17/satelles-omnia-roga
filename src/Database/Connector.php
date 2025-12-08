@@ -140,7 +140,7 @@ class Connector
     public function reloadUnreachableConnections(int $maxRetries = 3): array
     {
         $connections = $this->unreachableConnections;
-        $originalCount = count($connections);
+        $originalCount = $connections->count();
 
         if ($originalCount === 0) {
             $this->logger?->debug("No unreachable connections to reload");
