@@ -117,12 +117,11 @@ class Connector
                 $this->pools[$effectiveName]->fill();
                 $this->logger?->debug("Pool filled: $effectiveName");
                 $this->loadedConnections->addIfNotExist($config);
-            }catch (\Throwable $e){
-                $this->logger?->error("Error filling pool: $effectiveName: ". $e->getMessage());
-                $this->poolCount[$config->name]--;
-                unset($this->pools[$effectiveName]);
+            } catch (\Throwable $e) {
+                $this->logger?->error("Error filling pool: $effectiveName: " . $e->getMessage());
                 $config->setLastConnectionError($e->getMessage());
                 $this->unreachableConnections->addIfNotExist($config);
+                $this->removePool($config->name);
             }
         } else {
             $this->logger?->warning("Connection test failed: $config->name", $config->toArray());
@@ -138,6 +137,17 @@ class Connector
         $this->logger?->info("Reloading unreachable connections");
         while ($this->unreachableConnections->count() > 0) {
             $this->loadConnection($this->unreachableConnections->pop());
+        }
+    }
+
+    public function healthCheckLoadedConnections(): void
+    {
+        foreach ($this->loadedConnections as $config) {
+            if (!$config->canConnect()) {
+                $this->logger?->warning("Connection test failed: $config->name", $config->toArray());
+                $this->unreachableConnections->addIfNotExist($config);
+                $this->removePool($config->name);
+            }
         }
     }
 
