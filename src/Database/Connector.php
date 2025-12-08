@@ -135,8 +135,12 @@ class Connector
      */
     public function reloadUnreachableConnections(): void
     {
+        //we don't want to generate an infinite loop if there is a problem with the connection
+        $connections = $this->unreachableConnections->toArray();
+        //for that we need to copy the array and clear the original one
+        $this->unreachableConnections->clear();
         $this->logger?->info("♻︎ Reloading unreachable connections");
-        while ($conn = $this->unreachableConnections->pop()) {
+        while ($conn = array_shift($connections)) {
             $this->logger?->debug("♻️ Reconnecting to $conn->name, remaining dead connections: " . $this->unreachableConnections->count() . "");
             $this->loadConnection($conn);
         }
