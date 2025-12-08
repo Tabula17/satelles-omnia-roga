@@ -136,8 +136,9 @@ class Connector
     public function reloadUnreachableConnections(): void
     {
         $this->logger?->info("♻︎ Reloading unreachable connections");
-        while ($this->unreachableConnections->count() > 0) {
-            $this->loadConnection($this->unreachableConnections->pop());
+        while ($conn = $this->unreachableConnections->pop()) {
+            $this->logger?->debug("♻️ Reconnecting to $conn->name, remaining dead connections: " . $this->unreachableConnections->count() . "");
+            $this->loadConnection($conn);
         }
     }
 
