@@ -32,7 +32,7 @@ class DbConfig extends ConnectionConfig
             }
         }
     }
-
+    public array $metadata = [];
     /**
      * Checks if a connection to the specified host and port can be established.
      *

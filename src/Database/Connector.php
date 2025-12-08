@@ -24,6 +24,7 @@ class Connector
     private array $usedConnections = [];
     private DbConfigCollection $unreachableConnections;
     private DbConfigCollection $loadedConnections;
+    private DbConfigCollection $permanentlyFailedConnections;
 
     /**
      * Constructor method for initializing the object with the provided parameters.
@@ -67,10 +68,10 @@ class Connector
      *
      * @param DbConfig $config The configuration object for establishing a database connection.
      * @param int $poolSize The size of the connection pool must be greater than 0. Defaults to 12.
-     * @return void
+     * @return bool
      * @throws InvalidArgumentException If the provided pool size is less than or equal to 0.
      */
-    public function loadConnection(DbConfig $config, int $poolSize = 12): void
+    public function loadConnection(DbConfig $config, int $poolSize = 12): bool
     {
         if ($config->canConnect()) {
             if (isset($config->maxConnections) && ($config->maxConnections > 0)) {
@@ -118,32 +119,93 @@ class Connector
                 $this->pools[$effectiveName]->fill();
                 $this->logger?->debug("Pool filled: $effectiveName");
                 $this->loadedConnections->addIfNotExist($config);
+                return true;
             } catch (\Throwable $e) {
                 $this->logger?->error("Error filling pool: $effectiveName: " . $e->getMessage());
                 $config->setLastConnectionError($e->getMessage());
                 $this->unreachableConnections->addIfNotExist($config);
                 $this->removePool($config->name);
+                return false;
             }
         } else {
             $this->logger?->warning("⚠️ Connection test failed: $config->name", $config->toArray());
             $this->unreachableConnections->addIfNotExist($config);
+            return false;
         }
     }
 
     /**
      * @throws InvalidArgumentException
      */
-    public function reloadUnreachableConnections(): void
+    public function reloadUnreachableConnections(int $maxRetries = 3): array
     {
-        //we don't want to generate an infinite loop if there is a problem with the connection
         $connections = $this->unreachableConnections->toArray();
-        //for that we need to copy the array and clear the original one
-        $this->unreachableConnections->clear();
-        $this->logger?->info("♻︎ Reloading unreachable connections");
-        while ($conn = array_shift($connections)) {
-            $this->logger?->debug("♻️ Reconnecting to $conn->name, remaining dead connections: " . $this->unreachableConnections->count() . "");
-            $this->loadConnection($conn);
+        $originalCount = count($connections);
+
+        if ($originalCount === 0) {
+            $this->logger?->debug("No unreachable connections to reload");
+            return ['total' => 0, 'success' => 0, 'failed' => 0];
         }
+
+        // LIMPIA ANTES de reintentar (evita bucle infinito)
+        $this->unreachableConnections->clear();
+
+        $this->logger?->info("♻︎ Reloading {$originalCount} unreachable connections (max {$maxRetries} retries)");
+
+        $results = ['success' => 0, 'failed' => 0];
+
+        foreach ($connections as $config) {
+            // Manejo de reintentos con backoff
+            $retryCount = $config->metadata['retry_count'] ?? 0;
+
+            if ($retryCount >= $maxRetries) {
+                $this->logger?->warning(
+                    "Connection {$config->name} exceeded max retries, moving to permanent failures",
+                    ['retry_count' => $retryCount, 'last_error' => $config->lastConnectionError ?? 'unknown']
+                );
+                $this->permanentlyFailedConnections->addIfNotExist($config);
+                $results['failed']++;
+                continue;
+            }
+
+            // Backoff exponencial (esperar más en cada reintento)
+            if ($retryCount > 0) {
+                $backoffSeconds = min(300, (2 ** $retryCount) * 2); // 2, 4, 8, 16... segundos
+                $this->logger?->debug("Backoff {$backoffSeconds}s for {$config->name} (retry #{$retryCount})");
+
+                if (extension_loaded('swoole') && Coroutine::getCid() > -1) {
+                    Coroutine::sleep($backoffSeconds);
+                } else {
+                    sleep($backoffSeconds);
+                }
+            }
+
+            // Actualizar contador de reintentos
+            $config->metadata['retry_count'] = $retryCount + 1;
+            $config->metadata['last_retry_at'] = time();
+
+            // Intentar reconexión
+            $this->logger?->debug("Attempting reconnect to {$config->name} (retry #{$config->metadata['retry_count']})");
+
+            if ($this->loadConnection($config)) {
+                $results['success']++;
+                $this->logger?->info("✅ Successfully reconnected to {$config->name}");
+
+                // Resetear contador de reintentos si tuvo éxito
+                unset($config->metadata['retry_count']);
+            } else {
+                $results['failed']++;
+                $this->logger?->warning("❌ Failed to reconnect to {$config->name}", [
+                    'retry_count' => $config->metadata['retry_count'],
+                    'error' => $config->lastConnectionError ?? 'Unknown error'
+                ]);
+            }
+        }
+
+        $results['total'] = $originalCount;
+        $this->logger?->info("Reload completed", $results);
+
+        return $results;
     }
 
     public function healthCheckLoadedConnections(): void
@@ -157,10 +219,16 @@ class Connector
         }
     }
 
+    public function getPermanentlyFailedConnections(): DbConfigCollection
+    {
+        return $this->permanentlyFailedConnections;
+    }
+
     public function getUnreachableConnections(): DbConfigCollection
     {
         return $this->unreachableConnections;
     }
+
     /**
      * @return int Número de conexiones cargadas activas
      */
@@ -175,6 +243,11 @@ class Connector
     public function getUnreachableCount(): int
     {
         return $this->unreachableConnections->count();
+    }
+
+    public function getPermanentlyFailedCount(): int
+    {
+        return $this->permanentlyFailedConnections->count();
     }
 
     /**
@@ -220,6 +293,7 @@ class Connector
             'timestamp' => time()
         ];
     }
+
     /**
      * Retrieves an available connection pool by its name or creates a new one if possible.
      *
