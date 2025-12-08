@@ -139,7 +139,7 @@ class Connector
      */
     public function reloadUnreachableConnections(int $maxRetries = 3): array
     {
-        $connections = $this->unreachableConnections->toArray();
+        $connections = $this->unreachableConnections;
         $originalCount = count($connections);
 
         if ($originalCount === 0) {
