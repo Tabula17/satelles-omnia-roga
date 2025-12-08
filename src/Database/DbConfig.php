@@ -51,5 +51,13 @@ class DbConfig extends ConnectionConfig
     {
         $this->lastConnectionError = $error;
     }
+    public function setMetadataProperty(string $key, mixed $value): void
+    {
+        $this->metadata[$key] = $value;
+    }
+    public function unsetMetadataProperty(string $key): void
+    {
+        unset($this->metadata[$key]);
+    }
 
 }
