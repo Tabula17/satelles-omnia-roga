@@ -107,6 +107,9 @@ class Server extends \Swoole\Server
      */
     public function init(Server $server, int $workerId): void
     {
+        foreach ($this->beforeWorkerStart as $callback) {
+            $callback($server, $workerId);
+        }
         $server->logger?->info("Iniciando POOL de conexiones en worker #{$workerId}");
         $server->connector->loadConnections($server->poolCollection);
         foreach ($server->connector->getPoolGroupNames() as $poolName) {
@@ -123,6 +126,9 @@ class Server extends \Swoole\Server
         $status = $server->getWorkerStatus($workerId);
         $server->logger?->info("Worker #{$workerId} status: " . $status);
         //return parent::start();
+        foreach ($this->afterWorkerStart as $callback) {
+            $callback($server, $workerId);
+        }
     }
 
     /**
@@ -294,6 +300,10 @@ class Server extends \Swoole\Server
 
     public function process(Server $server, int $fd, int $reactorId, string $data): void
     {
+        $workerId = $server->getWorkerId();
+        foreach ($this->beforeReceive as $callback) {
+            $callback($server, $workerId);
+        }
         $server->logger?->debug("Procesado request de $fd en proceso > #$reactorId");
         if ($this->mtlsMiddleware !== null) {
             $this->mtlsMiddleware->handle($server, $fd, $data, function ($server, $context) {
@@ -302,6 +312,9 @@ class Server extends \Swoole\Server
             });
         } else {
             $this->doProcess($server, $fd, $data);
+        }
+        foreach ($this->afterReceive as $callback) {
+            $callback($server, $workerId);
         }
     }
 
