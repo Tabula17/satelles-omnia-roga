@@ -46,6 +46,7 @@ class Connector
     {
         $this->unreachableConnections = new DbConfigCollection();
         $this->loadedConnections = new DbConfigCollection();
+        $this->permanentlyFailedConnections = new DbConfigCollection();
     }
 
     /**
@@ -140,17 +141,25 @@ class Connector
     public function reloadUnreachableConnections(int $maxRetries = 3): array
     {
         $connections = $this->unreachableConnections;
+        // LIMPIA ANTES de reintentar (evita bucle infinito)
+        $this->unreachableConnections->clear();
+        return $this->reloadConnections($connections, $maxRetries);
+    }
+    /**
+     * @throws InvalidArgumentException
+     */
+    private function reloadConnections($connections, int $maxRetries = 3): array
+    {
+        //$connections = $this->unreachableConnections;
         $originalCount = $connections->count();
 
         if ($originalCount === 0) {
-            $this->logger?->debug("No unreachable connections to reload");
+            $this->logger?->debug("No connections to reload");
             return ['total' => 0, 'success' => 0, 'failed' => 0];
         }
 
-        // LIMPIA ANTES de reintentar (evita bucle infinito)
-        $this->unreachableConnections->clear();
 
-        $this->logger?->info("♻︎ Reloading {$originalCount} unreachable connections (max {$maxRetries} retries)");
+        $this->logger?->info("♻︎ Reloading {$originalCount} connections (max {$maxRetries} retries)");
 
         $results = ['success' => 0, 'failed' => 0];
         /* @var DbConfig $config */
@@ -208,6 +217,15 @@ class Connector
         return $results;
     }
 
+    /**
+     * @throws InvalidArgumentException
+     */
+    public function reloadPermanentlyFailedConnections(int $maxRetries = 3): array
+    {
+        $connections = $this->permanentlyFailedConnections;
+        $this->permanentlyFailedConnections->clear();
+        return $this->reloadConnections($connections, $maxRetries);
+    }
     public function healthCheckLoadedConnections(): void
     {
         foreach ($this->loadedConnections as $config) {
@@ -275,6 +293,7 @@ class Connector
             'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
             'checked' => $this->loadedConnections->count(),
             'unreachable' => $this->unreachableConnections->count(),
+            'permanent_failures' => $this->permanentlyFailedConnections->count(),
             'total_pools' => $this->pools->count(),
             'timestamp' => time()
         ];
