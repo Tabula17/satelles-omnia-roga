@@ -312,6 +312,7 @@ class Connector
         return [
             'loaded_connections' => $this->loadedConnections->count(),
             'unreachable_connections' => $this->unreachableConnections->count(),
+            'permanent_failures' => $this->permanentlyFailedConnections->count(),
             'active_pools' => $this->pools->count(),
             'pool_groups' => array_keys($this->poolCount),
             'timestamp' => time()
