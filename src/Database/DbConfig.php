@@ -59,5 +59,4 @@ class DbConfig extends ConnectionConfig
     {
         unset($this->metadata[$key]);
     }
-
 }

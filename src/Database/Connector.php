@@ -129,7 +129,11 @@ class Connector
                 return false;
             }
         } else {
-            $this->logger?->warning("⚠️ Connection test failed: $config->name", $config->toArray());
+            $cfg = $config->toArray();
+            if(array_key_exists('password', $cfg)) {
+                $cfg['password'] = '********';
+            }
+            $this->logger?->warning("⚠️ Connection test failed: $config->name", $cfg);
             $this->unreachableConnections->addIfNotExist($config);
             return false;
         }
@@ -234,7 +238,11 @@ class Connector
     {
         foreach ($this->loadedConnections as $config) {
             if (!$config->canConnect()) {
-                $this->logger?->warning("🚦 Connection test failed: $config->name", $config->toArray());
+                $cfg = $config->toArray();
+                if(array_key_exists('password', $cfg)) {
+                    $cfg['password'] = '********';
+                }
+                $this->logger?->warning("🚦 Connection test failed: $config->name", $cfg);
                 $this->unreachableConnections->addIfNotExist($config);
                 $this->removePool($config->name);
             }
