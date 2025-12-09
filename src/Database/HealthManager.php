@@ -5,8 +5,17 @@ namespace Tabula17\Satelles\Omnia\Roga\Database;
 use Psr\Log\LoggerInterface;
 use Swoole\Coroutine;
 use Swoole\Server;
+use Tabula17\Satelles\Utilis\Exception\InvalidArgumentException;
 use Throwable;
 
+/**
+ * Class HealthManager
+ *
+ * This class is responsible for managing health checks across workers in a server ecosystem.
+ * It provides mechanisms to start, stop, and monitor health checks, as well as perform periodic diagnostics
+ * such as database and memory health inspections. The class also handles graceful stopping of health checks
+ * to ensure a clean shutdown process.
+ */
 class HealthManager
 {
     private array $checks = [];
@@ -178,7 +187,11 @@ class HealthManager
         // return $this->checkWorkerHeartbeat($workerId);
     }
 
-
+    /**
+     *
+     * @param Connector $connector
+     * @return void
+     */
     public function registerDatabaseCheck(Connector $connector): void
     {
         $this->connector = $connector;
@@ -189,6 +202,11 @@ class HealthManager
         ];
     }
 
+    /**
+     * @param Server $server
+     * @param int $workerId
+     * @return void
+     */
     public function setupServerTick(\Swoole\Server $server, int $workerId): void
     {
         $this->logger->notice("Evaluando iniciar tick para health checks en worker #{$workerId} (Worker max: {$server->setting['worker_num']})");
@@ -201,7 +219,12 @@ class HealthManager
         }
     }
 
-
+    /**
+     * Performs health checks for the system, including database and memory checks.
+     *
+     * @param int $workerId The ID of the worker performing the health checks.
+     * @return void
+     */
     public function performHealthChecks(int $workerId): void
     {
         if ($this->isChecking) {
@@ -300,6 +323,13 @@ class HealthManager
         }
     }
 
+    /**
+     * Retries connections that have previously failed permanently for a specified worker.
+     *
+     * @param int $workerId The unique identifier of the worker handling the retries.
+     * @return array An array representing the result of the retry attempts.
+     * @throws InvalidArgumentException
+     */
     public function retryPermanentFailures(int $workerId): array
     {
         $this->logger->info("Retrying permanent failures for worker #{$workerId}:");
@@ -376,6 +406,11 @@ class HealthManager
         return $int;
     }
 
+    /**
+     * Retrieves the current health status of the system.
+     *
+     * @return array An associative array containing the health checks, the current timestamp, and the interval until the next check in seconds.
+     */
     public function getHealthStatus(): array
     {
         return [
@@ -409,18 +444,18 @@ class HealthManager
         }
 
         // Opción 1: Distribución lineal simple
-        $offset = ($workerId % $totalWorkers) * $baseStagger;
+        // $offset = ($workerId % $totalWorkers) * $baseStagger;
 
         // Opción 2: Distribución usando número primo para mejor dispersión
-        $primeMultiplier = 11; // Número primo para evitar patrones
-        $offset = ($workerId * $primeMultiplier) % $maxOffset;
+        //  $primeMultiplier = 11; // Número primo para evitar patrones
+        // $offset = ($workerId * $primeMultiplier) % $maxOffset;
 
         // Opción 3: Offset basado en hash del worker ID (más aleatorio)
         $hash = crc32((string)$workerId);
         $offset = ($hash % $maxOffset);
 
         // Asegurar que no sea cero para todos excepto primer worker
-        if ($workerId > 0 && $offset == 0) {
+        if ($workerId > 0 && $offset === 0) {
             $offset = min($baseStagger, $maxOffset - 1);
         }
 
@@ -451,10 +486,8 @@ class HealthManager
 
         // Factor basado en memoria
         $memoryFactor = 1.0;
-        if (isset($systemLoad['memory_percent'])) {
-            if ($systemLoad['memory_percent'] > 85) {
-                $memoryFactor = 1.3;
-            }
+        if (isset($systemLoad['memory_percent']) && $systemLoad['memory_percent'] > 85) {
+            $memoryFactor = 1.3;
         }
 
         // Factor basado en hora del día (ej: evitar horas pico)
