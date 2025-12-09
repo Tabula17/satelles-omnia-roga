@@ -140,7 +140,7 @@ class Connector
      */
     public function reloadUnreachableConnections(int $maxRetries = 3): array
     {
-        $connections = $this->unreachableConnections;
+        $connections = clone $this->unreachableConnections;
         // LIMPIA ANTES de reintentar (evita bucle infinito)
         $this->unreachableConnections->clear();
         return $this->reloadConnections($connections, $maxRetries);
@@ -222,12 +222,11 @@ class Connector
      */
     public function retryFailedConnections(int $maxRetries = 3): array
     {
-        $connections = $this->permanentlyFailedConnections;
+        $connections = clone $this->permanentlyFailedConnections;
         $this->permanentlyFailedConnections->clear();
         foreach ($connections as $config) {
             $config->unsetMetadataProperty('retry_count');
             $config->unsetMetadataProperty('last_retry_at');
-
         }
         return $this->reloadConnections($connections, $maxRetries);
     }
