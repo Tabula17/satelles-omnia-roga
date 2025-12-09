@@ -224,6 +224,11 @@ class Connector
     {
         $connections = $this->permanentlyFailedConnections;
         $this->permanentlyFailedConnections->clear();
+        foreach ($connections as $config) {
+            $config->unsetMetadataProperty('retry_count');
+            $config->unsetMetadataProperty('last_retry_at');
+
+        }
         return $this->reloadConnections($connections, $maxRetries);
     }
     public function healthCheckLoadedConnections(): void
