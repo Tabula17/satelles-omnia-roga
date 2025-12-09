@@ -105,7 +105,7 @@ class XmlStatements implements LoaderStorageInterface
         $descriptors = [];
         foreach (StatementCollection::$metadataVariantKeywords as $variant) {
             $collection = $loader->getStatementCollection($name, true);
-            $variants = $collection?->availableVariantsByMetadata($variant);
+            $variants = $collection?->availableVariantsByMetadata($variant);//todo: check if this is correct, sometimes $variant is array??
             foreach ($variants as $variantValue) {
                 $this->logger?->debug("Processing variant $variant " . var_export($variantValue, true));
                 //foreach ($variantValue as $value) {
