@@ -148,7 +148,7 @@ class Connector
     /**
      * @throws InvalidArgumentException
      */
-    private function reloadConnections($connections, int $maxRetries = 3): array
+    private function reloadConnections(DbConfigCollection $connections, int $maxRetries = 3): array
     {
         //$connections = $this->unreachableConnections;
         $originalCount = $connections->count();
@@ -220,7 +220,7 @@ class Connector
     /**
      * @throws InvalidArgumentException
      */
-    public function reloadPermanentlyFailedConnections(int $maxRetries = 3): array
+    public function retryFailedConnections(int $maxRetries = 3): array
     {
         $connections = $this->permanentlyFailedConnections;
         $this->permanentlyFailedConnections->clear();
