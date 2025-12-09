@@ -26,6 +26,12 @@ class Server extends \Swoole\Server
 {
 
     private array $privateEvents = ['workerStart', 'receive'];
+    private array $beforeWorkerStart = [];
+    private array $afterWorkerStart = [];
+    private array $beforeWorkerStop = [];
+    private array $afterWorkerStop = [];
+    private array $beforeReceive = [];
+    private array $afterReceive = [];
 
     public function __construct(
         public Connector                        $connector,
@@ -51,16 +57,36 @@ class Server extends \Swoole\Server
         $this->logger?->info("Iniciando servidor TCP en {$this->host}:{$this->port}");
         return parent::start();
     }
-
     public function on(string $event_name, callable $callback): bool
     {
         if (in_array($event_name, $this->privateEvents, true)) {
-            $this->logger?->warning("Evento privado $event_name no permitido");
+            if (!$this->onAfter($event_name, $callback)) {
+                $this->logger?->warning("Evento privado $event_name no permitido");
+            }
             return false;
         }
         return parent::on($event_name, $callback);
     }
 
+    public function onAfter(string $event_name, callable $callback): bool
+    {
+        $prop = 'after' . ucfirst($event_name);
+        if (isset($this->$prop) && !in_array($callback, $this->$prop, true)) {
+            $this->$prop[] = $callback;
+            return true;
+        }
+        return false;
+    }
+
+    public function onBefore(string $event_name, callable $callback): bool
+    {
+        $prop = 'before' . ucfirst($event_name);
+        if (isset($this->$prop) && !in_array($callback, $this->$prop, true)) {
+            $this->$prop[] = $callback;
+            return true;
+        }
+        return false;
+    }
     private function onPrivateEvent(string $event_name, callable $callback): void
     {
         parent::on($event_name, $callback);
