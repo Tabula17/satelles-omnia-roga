@@ -74,13 +74,14 @@ class Server extends \Swoole\Server
             return false;
         }
         $callbackWrapper = function (...$args) use ($callback, $event_name) {
-            $this->runEventsAction($event_name, 'before');
+            $this->runEventsAction($event_name, $args, 'before');
             $callback(...$args);
-            $this->runEventsAction($event_name, 'after');
+            $this->runEventsAction($event_name, $args, 'after');
         };
         return parent::on($event_name, $callbackWrapper);
         //return parent::on($event_name, $callback);
     }
+
     public function off(string $event_name, callable $callback): bool
     {
         if (in_array($event_name, $this->privateEvents, true)) {
@@ -96,7 +97,7 @@ class Server extends \Swoole\Server
                 $this->eventHooks[$prop] = array_diff($this->eventHooks[$prop], [$callback]);
             }
         }
-       return parent::on($event_name, static fn() => false);
+        return parent::on($event_name, static fn() => false);
 
     }
 
@@ -112,6 +113,7 @@ class Server extends \Swoole\Server
         }
         return false;
     }
+
     private function offEventHook(string $event_name, callable $callback, string $when = 'after'): bool
     {
         $prop = $when . ucfirst($event_name);
@@ -122,12 +124,12 @@ class Server extends \Swoole\Server
         return false;
     }
 
-    private function runEventsAction(string $event_name, string $when = 'after'): void
+    private function runEventsAction(string $event_name, ?array $args = [], string $when = 'after'): void
     {
         $prop = $when . ucfirst($event_name);
         if (isset($this->eventHooks[$prop])) {
             foreach ($this->eventHooks[$prop] as $callback) {
-                $callback();
+                $callback(...$args);
             }
         }
     }
@@ -136,25 +138,28 @@ class Server extends \Swoole\Server
     {
         return $this->onEventHook($event_name, $callback, 'after');
     }
+
     public function offAfter(string $event_name, callable $callback): bool
     {
         return $this->offEventHook($event_name, $callback, 'after');
     }
+
     public function onBefore(string $event_name, callable $callback): bool
     {
         return $this->onEventHook($event_name, $callback, 'before');
     }
+
     public function offBefore(string $event_name, callable $callback): bool
     {
-       return $this->offEventHook($event_name, $callback, 'before');
+        return $this->offEventHook($event_name, $callback, 'before');
     }
 
     private function onPrivateEvent(string $event_name, callable $callback): bool
     {
         $callbackWrapper = function (...$args) use ($callback, $event_name) {
-            $this->runEventsAction($event_name, 'before');
+            $this->runEventsAction($event_name, $args, 'before');
             $callback(...$args);
-            $this->runEventsAction($event_name, 'after');
+            $this->runEventsAction($event_name, $args, 'after');
         };
         return parent::on($event_name, $callbackWrapper);
     }
