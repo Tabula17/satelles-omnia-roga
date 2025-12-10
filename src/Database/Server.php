@@ -81,7 +81,6 @@ class Server extends \Swoole\Server
         return parent::on($event_name, $callbackWrapper);
         //return parent::on($event_name, $callback);
     }
-
     public function off(string $event_name, callable $callback): bool
     {
         if (in_array($event_name, $this->privateEvents, true)) {
@@ -100,7 +99,6 @@ class Server extends \Swoole\Server
         return parent::on($event_name, static fn() => false);
 
     }
-
     private function onEventHook(string $event_name, callable $callback, string $when = 'after'): bool
     {
         $prop = $when . ucfirst($event_name);
@@ -113,7 +111,6 @@ class Server extends \Swoole\Server
         }
         return false;
     }
-
     private function offEventHook(string $event_name, callable $callback, string $when = 'after'): bool
     {
         $prop = $when . ucfirst($event_name);
@@ -123,7 +120,6 @@ class Server extends \Swoole\Server
         }
         return false;
     }
-
     private function runEventsAction(string $event_name, ?array $args = [], string $when = 'after'): void
     {
         $prop = $when . ucfirst($event_name);
@@ -133,27 +129,22 @@ class Server extends \Swoole\Server
             }
         }
     }
-
     public function onAfter(string $event_name, callable $callback): bool
     {
         return $this->onEventHook($event_name, $callback, 'after');
     }
-
     public function offAfter(string $event_name, callable $callback): bool
     {
         return $this->offEventHook($event_name, $callback, 'after');
     }
-
     public function onBefore(string $event_name, callable $callback): bool
     {
         return $this->onEventHook($event_name, $callback, 'before');
     }
-
     public function offBefore(string $event_name, callable $callback): bool
     {
         return $this->offEventHook($event_name, $callback, 'before');
     }
-
     private function onPrivateEvent(string $event_name, callable $callback): bool
     {
         $callbackWrapper = function (...$args) use ($callback, $event_name) {
@@ -223,6 +214,7 @@ class Server extends \Swoole\Server
      * @param Server $server
      * @param int $fd Descriptor de archivo del cliente
      * @param string $message Mensaje de error
+     * @param array|null $data
      * @return void
      */
     private function sendError(Server $server, int $fd, string $message, ?array $data = []): void
@@ -239,8 +231,6 @@ class Server extends \Swoole\Server
             $server->logger?->error($message);
         }
     }
-
-
     /**
      * Processes an incoming request, builds and executes a database statement
      * based on the provided data, and sends a response back with the results.
@@ -369,13 +359,8 @@ class Server extends \Swoole\Server
             $server->connector->putConnection($conn);
         }
     }
-
     public function process(Server $server, int $fd, int $reactorId, string $data): void
     {
-        //$workerId = $server->getWorkerId();
-        /* foreach ($this->beforeReceive as $callback) {
-             $callback($server, $workerId);
-         }*/
         $server->logger?->debug("Procesado request de $fd en proceso > #$reactorId");
         if ($this->mtlsMiddleware !== null) {
             $this->mtlsMiddleware->handle($server, $fd, $data, function ($server, $context) {
@@ -385,11 +370,7 @@ class Server extends \Swoole\Server
         } else {
             $this->doProcess($server, $fd, $data);
         }
-        /* foreach ($this->afterReceive as $callback) {
-             $callback($server, $workerId);
-         }*/
     }
-
     /**
      * Processes a request received from the server, delegating it to the appropriate handler
      * and managing errors if any exception occurs.
@@ -402,7 +383,6 @@ class Server extends \Swoole\Server
      */
     private function doProcess(Server $server, int $fd, string $data): void
     {
-
         try {
             $this->processRequest($server, $fd, $data);
         } catch (\Throwable $e) {
