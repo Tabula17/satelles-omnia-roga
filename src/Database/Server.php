@@ -73,9 +73,9 @@ class Server extends \Swoole\Server
             }
             return false;
         }
-        $callbackWrapper = function ($server, $fd, $reactorId, $data) use ($callback, $event_name) {
+        $callbackWrapper = function (...$args) use ($callback, $event_name) {
             $this->runEventsAction($event_name, 'before');
-            $callback($server, $fd, $reactorId, $data);
+            $callback(...$args);
             $this->runEventsAction($event_name, 'after');
         };
         return parent::on($event_name, $callbackWrapper);
@@ -151,9 +151,9 @@ class Server extends \Swoole\Server
 
     private function onPrivateEvent(string $event_name, callable $callback): bool
     {
-        $callbackWrapper = function ($server, $fd, $reactorId, $data) use ($callback, $event_name) {
+        $callbackWrapper = function (...$args) use ($callback, $event_name) {
             $this->runEventsAction($event_name, 'before');
-            $callback($server, $fd, $reactorId, $data);
+            $callback(...$args);
             $this->runEventsAction($event_name, 'after');
         };
         return parent::on($event_name, $callbackWrapper);
