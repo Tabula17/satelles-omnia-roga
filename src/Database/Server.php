@@ -33,7 +33,7 @@ class Server extends \Swoole\Server
      private array $afterWorkerStop = [];
      private array $beforeReceive = [];
      private array $afterReceive = [];*/
-    private array $eventsActions = [];
+    private array $eventHooks = [];
 
     public function __construct(
         TCPServerConfig                         $config,
