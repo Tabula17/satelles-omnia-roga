@@ -11,6 +11,7 @@ use Tabula17\Satelles\Omnia\Roga\Exception\ExceptionDefinitions;
 use Tabula17\Satelles\Omnia\Roga\Exception\StatementExecutionException;
 use Tabula17\Satelles\Omnia\Roga\LoaderInterface;
 use Tabula17\Satelles\Omnia\Roga\StatementBuilder;
+use Tabula17\Satelles\Utilis\Config\TCPServerConfig;
 use Tabula17\Satelles\Utilis\Exception\InvalidArgumentException;
 use Tabula17\Satelles\Utilis\Middleware\TCPmTLSAuthMiddleware;
 
@@ -26,28 +27,34 @@ class Server extends \Swoole\Server
 {
 
     private array $privateEvents = ['workerStart', 'receive'];
-    private array $beforeWorkerStart = [];
-    private array $afterWorkerStart = [];
-    private array $beforeWorkerStop = [];
-    private array $afterWorkerStop = [];
-    private array $beforeReceive = [];
-    private array $afterReceive = [];
+    /* private array $beforeWorkerStart = [];
+     private array $afterWorkerStart = [];
+     private array $beforeWorkerStop = [];
+     private array $afterWorkerStop = [];
+     private array $beforeReceive = [];
+     private array $afterReceive = [];*/
+    private array $eventsActions = [];
 
     public function __construct(
+        TCPServerConfig                         $config,
         public Connector                        $connector,
         public DbConfigCollection               $poolCollection,
         public LoaderInterface                  $loader,
-        string                                  $host = '0.0.0.0',
-        int                                     $port = 0,
-        int                                     $mode = SWOOLE_BASE,
-        int                                     $sock_type = SWOOLE_SOCK_TCP,
         public ?LoggerInterface                 $logger = null,
         private readonly ?LoggerInterface       $db_logger = null,
         private readonly ?TCPmTLSAuthMiddleware $mtlsMiddleware = null
 
     )
     {
-        parent::__construct($host, $port, $mode, $sock_type);
+        parent::__construct($config->host, $config->port, $config->mode ?? SWOOLE_BASE, $config->type ?? SWOOLE_SOCK_TCP);
+
+        $sslEnabled = isset($config->ssl) && $config->ssl->enabled;
+        $options = $sslEnabled ? array_merge($config->options, $config->ssl->toArray()) : $config->options;
+        if ($sslEnabled) {
+            unset($options['enabled']);
+        }
+        $this->set($options);
+
         $this->onPrivateEvent('workerStart', [$this, 'init']);
         $this->onPrivateEvent('receive', [$this, 'process']);
     }
@@ -57,39 +64,99 @@ class Server extends \Swoole\Server
         $this->logger?->info("Iniciando servidor TCP en {$this->host}:{$this->port}");
         return parent::start();
     }
+
     public function on(string $event_name, callable $callback): bool
     {
         if (in_array($event_name, $this->privateEvents, true)) {
             if (!$this->onAfter($event_name, $callback)) {
-                $this->logger?->warning("Evento privado $event_name no permitido");
+                $this->logger?->warning("Evento privado $event_name, acción no permitido");
             }
             return false;
         }
-        return parent::on($event_name, $callback);
+        $callbackWrapper = function ($server, $fd, $reactorId, $data) use ($callback, $event_name) {
+            $this->runEventsAction($event_name, 'before');
+            $callback($server, $fd, $reactorId, $data);
+            $this->runEventsAction($event_name, 'after');
+        };
+        return parent::on($event_name, $callbackWrapper);
+        //return parent::on($event_name, $callback);
+    }
+    public function off(string $event_name, callable $callback): bool
+    {
+        if (in_array($event_name, $this->privateEvents, true)) {
+            if (!$this->onAfter($event_name, $callback)) {
+                $this->logger?->warning("Evento privado $event_name, acción no permitida");
+            }
+            return false;
+        }
+        $this->offEventHook($event_name, $callback);
+        foreach (['before', 'after'] as $when) {
+            $prop = $when . ucfirst($event_name);
+            if (isset($this->eventHooks[$prop])) {
+                $this->eventHooks[$prop] = array_diff($this->eventHooks[$prop], [$callback]);
+            }
+        }
+       return parent::on($event_name, static fn() => false);
+
+    }
+
+    private function onEventHook(string $event_name, callable $callback, string $when = 'after'): bool
+    {
+        $prop = $when . ucfirst($event_name);
+        if (!isset($this->eventHooks[$prop])) {
+            $this->eventHooks[$prop] = [];
+        }
+        if (!in_array($callback, $this->eventHooks[$prop], true)) {
+            $this->eventHooks[$prop][] = $callback;
+            return true;
+        }
+        return false;
+    }
+    private function offEventHook(string $event_name, callable $callback, string $when = 'after'): bool
+    {
+        $prop = $when . ucfirst($event_name);
+        if (isset($this->eventHooks[$prop])) {
+            $this->eventHooks[$prop] = array_diff($this->eventHooks[$prop], [$callback]);
+            return true;
+        }
+        return false;
+    }
+
+    private function runEventsAction(string $event_name, string $when = 'after'): void
+    {
+        $prop = $when . ucfirst($event_name);
+        if (isset($this->eventHooks[$prop])) {
+            foreach ($this->eventHooks[$prop] as $callback) {
+                $callback();
+            }
+        }
     }
 
     public function onAfter(string $event_name, callable $callback): bool
     {
-        $prop = 'after' . ucfirst($event_name);
-        if (isset($this->$prop) && !in_array($callback, $this->$prop, true)) {
-            $this->$prop[] = $callback;
-            return true;
-        }
-        return false;
+        return $this->onEventHook($event_name, $callback, 'after');
     }
-
+    public function offAfter(string $event_name, callable $callback): bool
+    {
+        return $this->offEventHook($event_name, $callback, 'after');
+    }
     public function onBefore(string $event_name, callable $callback): bool
     {
-        $prop = 'before' . ucfirst($event_name);
-        if (isset($this->$prop) && !in_array($callback, $this->$prop, true)) {
-            $this->$prop[] = $callback;
-            return true;
-        }
-        return false;
+        return $this->onEventHook($event_name, $callback, 'before');
     }
-    private function onPrivateEvent(string $event_name, callable $callback): void
+    public function offBefore(string $event_name, callable $callback): bool
     {
-        parent::on($event_name, $callback);
+       return $this->offEventHook($event_name, $callback, 'before');
+    }
+
+    private function onPrivateEvent(string $event_name, callable $callback): bool
+    {
+        $callbackWrapper = function ($server, $fd, $reactorId, $data) use ($callback, $event_name) {
+            $this->runEventsAction($event_name, 'before');
+            $callback($server, $fd, $reactorId, $data);
+            $this->runEventsAction($event_name, 'after');
+        };
+        return parent::on($event_name, $callbackWrapper);
     }
 
     /**
@@ -107,9 +174,9 @@ class Server extends \Swoole\Server
      */
     public function init(Server $server, int $workerId): void
     {
-        foreach ($this->beforeWorkerStart as $callback) {
+        /*foreach ($this->beforeWorkerStart as $callback) {
             $callback($server, $workerId);
-        }
+        }*/
         $server->logger?->info("Iniciando POOL de conexiones en worker #{$workerId}");
         $server->connector->loadConnections($server->poolCollection);
         foreach ($server->connector->getPoolGroupNames() as $poolName) {
@@ -126,9 +193,9 @@ class Server extends \Swoole\Server
         $status = $server->getWorkerStatus($workerId);
         $server->logger?->info("Worker #{$workerId} status: " . $status);
         //return parent::start();
-        foreach ($this->afterWorkerStart as $callback) {
+        /*foreach ($this->afterWorkerStart as $callback) {
             $callback($server, $workerId);
-        }
+        }*/
     }
 
     /**
@@ -241,7 +308,7 @@ class Server extends \Swoole\Server
                 }
                 $result = $multiRowset ? $result : $result[0];
                 $total = $multiRowset ? array_sum(array_map('count', $result)) : count($result);
-                $this->logger?->debug('Statement have resultset with: ' . $total. ' rows');
+                $this->logger?->debug('Statement have resultset with: ' . $total . ' rows');
             } else {
                 $this->logger?->debug('Statement have no resultset: ' . $stmt->rowCount());
                 // Para consultas sin resultados
@@ -300,10 +367,10 @@ class Server extends \Swoole\Server
 
     public function process(Server $server, int $fd, int $reactorId, string $data): void
     {
-        $workerId = $server->getWorkerId();
-        foreach ($this->beforeReceive as $callback) {
-            $callback($server, $workerId);
-        }
+        //$workerId = $server->getWorkerId();
+        /* foreach ($this->beforeReceive as $callback) {
+             $callback($server, $workerId);
+         }*/
         $server->logger?->debug("Procesado request de $fd en proceso > #$reactorId");
         if ($this->mtlsMiddleware !== null) {
             $this->mtlsMiddleware->handle($server, $fd, $data, function ($server, $context) {
@@ -313,9 +380,9 @@ class Server extends \Swoole\Server
         } else {
             $this->doProcess($server, $fd, $data);
         }
-        foreach ($this->afterReceive as $callback) {
-            $callback($server, $workerId);
-        }
+        /* foreach ($this->afterReceive as $callback) {
+             $callback($server, $workerId);
+         }*/
     }
 
     /**
