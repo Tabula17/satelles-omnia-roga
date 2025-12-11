@@ -6,6 +6,7 @@ use Psr\Log\LoggerInterface;
 use Swoole\Coroutine;
 use Swoole\Server;
 use Tabula17\Satelles\Utilis\Exception\InvalidArgumentException;
+use Tabula17\Satelles\Utilis\Trait\CoroutineHelper;
 use Throwable;
 
 /**
@@ -18,6 +19,7 @@ use Throwable;
  */
 class HealthManager
 {
+    use CoroutineHelper;
     private array $checks = [];
     private bool $shouldStop = false;
     private bool $isChecking = false;
@@ -119,7 +121,8 @@ class HealthManager
 
         while ($remaining > 0 && !$this->shouldStop) {
             $sleepTime = min($chunkSize, $remaining);
-            Coroutine::sleep($sleepTime);
+            //Coroutine::sleep($sleepTime);
+            $this->safeSleep($sleepTime);
             $remaining -= $sleepTime;
 
             // Log periódico de actividad
@@ -148,7 +151,8 @@ class HealthManager
                 break;
             }
 
-            Coroutine::sleep(1);
+            //Coroutine::sleep(1);
+            $this->safeSleep(1);
 
             // Log cada 5 segundos
             if ((time() - $startTime) % 5 == 0) {
@@ -214,7 +218,8 @@ class HealthManager
         if ($workerId < $server->setting['worker_num']) {
             $this->logger->notice("Iniciando tick para health checks en worker #{$workerId}");
             // Iniciar el tick después de 10 segundos (para dar tiempo a la inicialización)
-            Coroutine::sleep(10);
+           // Coroutine::sleep(10);
+            $this->safeSleep(10);
             $this->startHealthCheckCycle($server, $workerId);
         }
     }
