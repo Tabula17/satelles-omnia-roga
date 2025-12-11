@@ -11,6 +11,7 @@ use Tabula17\Satelles\Omnia\Roga\Database\Pool\PDOPoolExtended;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConnectionException;
 use Tabula17\Satelles\Omnia\Roga\Exception\ExceptionDefinitions;
 use Tabula17\Satelles\Utilis\Exception\InvalidArgumentException;
+use Tabula17\Satelles\Utilis\Trait\CoroutineHelper;
 use Throwable;
 
 /**
@@ -19,6 +20,7 @@ use Throwable;
  */
 class Connector
 {
+    use CoroutineHelper;
     //protected(set) PoolCollection $pools ;
     private array $poolCount = [];
     private array $usedConnections = [];
@@ -186,11 +188,7 @@ class Connector
                 $backoffSeconds = min(300, (2 ** $retryCount) * 2); // 2, 4, 8, 16... segundos
                 $this->logger?->debug("Backoff {$backoffSeconds}s for {$config->name} (retry #{$retryCount})");
 
-                if (extension_loaded('swoole') && Coroutine::getCid() > -1) {
-                    Coroutine::sleep($backoffSeconds);
-                } else {
-                    sleep($backoffSeconds);
-                }
+                $this->safeSleep($backoffSeconds);
             }
 
             // Actualizar contador de reintentos
@@ -374,7 +372,8 @@ class Connector
 
         // Retry con delay asíncrono
         if ($retryCount < $this->maxRetries) {
-            Coroutine::sleep($this->waitTimeout);
+            //Coroutine::sleep($this->waitTimeout);
+            $this->safeSleep($this->waitTimeout);
             return $this->getPool($name, $retryCount + 1);
         }
 
