@@ -1,13 +1,16 @@
 <?php
+declare(strict_types=1);
 
 namespace Tabula17\Satelles\Omnia\Roga\Database;
 
 use Psr\Log\LoggerInterface;
 use Swoole\Coroutine;
+use Swoole\Coroutine\Channel;
 use Swoole\Server;
 use Tabula17\Satelles\Utilis\Exception\InvalidArgumentException;
 use Tabula17\Satelles\Utilis\Trait\CoroutineHelper;
 use Throwable;
+use Swoole\Timer;
 
 /**
  * Class HealthManager
@@ -17,500 +20,613 @@ use Throwable;
  * such as database and memory health inspections. The class also handles graceful stopping of health checks
  * to ensure a clean shutdown process.
  */
+
+
 class HealthManager
 {
-    use CoroutineHelper;
-    private array $checks = [];
-    private bool $shouldStop = false;
-    private bool $isChecking = false;
-    private array $runningWorkers = []; // Para trackear workers activos
+    private Connector $connector;
+    private int $checkInterval;
+
+    // Propiedades para control de workers
+    private array $runningWorkers = [];
+    private bool $stopping = false;
+
+    // Sistema de control con Channels
+    private Channel $controlChannel;
+    private array $workerControlChannels = [];
+    private array $workerCoroutineIds = [];
+
+    // Estadísticas
+    private array $healthStats = [];
+    private array $checkHistory = [];
+    private const MAX_HISTORY = 100;
 
     public function __construct(
-        private Connector                 $connector,
-        private readonly int              $checkInterval = 30000,
+        Connector $connector,
+        int $checkInterval = 30000, // 30 segundos por defecto
         private readonly ?LoggerInterface $logger = null
-    )
-    {
+    ) {
+        $this->connector = $connector;
+        $this->checkInterval = $checkInterval;
+
+        // Crear canal de control principal
+        $this->controlChannel = new Channel(32);
     }
 
     /**
-     * Inicia el ciclo de health checks con control de parada
+     * Configura el health check en el servidor
+     */
+    public function setupServerTick(Server $server, int $workerId): void
+    {
+        // Solo workers principales (no task workers)
+        if ($workerId >= $server->setting['worker_num']) {
+            $this->logger?->debug("Worker #{$workerId} es task worker, omitiendo health checks");
+            return;
+        }
+
+        if (isset($this->runningWorkers[$workerId])) {
+            $this->logger?->warning("Worker #{$workerId} ya tiene health checks configurados");
+            return;
+        }
+
+        $this->logger?->info("⚙️ Configurando health checks para worker #{$workerId}");
+        $this->startHealthCheckCycle($server, $workerId);
+    }
+
+    /**
+     * Inicia el ciclo de health checks para un worker
      */
     public function startHealthCheckCycle(Server $server, int $workerId): void
     {
-        // Verificar si es worker principal (no task worker)
-        if ($workerId >= $server->setting['worker_num']) {
-            $this->logger->debug("Worker #{$workerId} es task worker, omitiendo health checks");
-            return;
-        }
-
-        // Registrar worker como activo
+        // Registrar worker
         $this->runningWorkers[$workerId] = [
-            'started_at' => time(),
+            'started_at' => microtime(true),
             'last_check' => 0,
-            'cycle_count' => 0
+            'cycle_count' => 0,
+            'status' => 'starting',
+            'consecutive_failures' => 0
         ];
 
-        // Aplicar escalonamiento (distribución temporal)
+        // Calcular offset escalonado
         $offset = $this->calculateWorkerOffset($workerId, $server->setting['worker_num']);
 
-        go(function () use ($server, $workerId, $offset) {
-            $this->logger->info("Worker #{$workerId}: Health checks iniciarán en {$offset}s");
+        // Crear canal de control para este worker específico
+        $workerControlChannel = new Channel(2);
+        $this->workerControlChannels[$workerId] = $workerControlChannel;
 
-            // Esperar offset para escalonar
-            Coroutine::sleep($offset);
+        // Iniciar la coroutine de health checks
+        $coroutineId = Coroutine::create(function () use ($server, $workerId, $offset, $workerControlChannel) {
+            $this->workerCoroutineIds[$workerId] = Coroutine::getCid();
 
-            $this->runHealthCheckLoop($server, $workerId);
+            $this->logger?->info("👷 Worker #{$workerId}: Health checks iniciarán en {$offset}s");
+
+            // Esperar offset escalonado
+            if ($offset > 0 && !$this->sleepWithStopCheck($offset, $workerControlChannel)) {
+                $this->cleanupWorker($workerId);
+                return;
+            }
+
+            if ($this->stopping) {
+                $this->cleanupWorker($workerId);
+                return;
+            }
+
+            // Cambiar estado a running
+            $this->runningWorkers[$workerId]['status'] = 'running';
+
+            // Ejecutar loop principal
+            $this->runHealthCheckLoop($server, $workerId, $workerControlChannel);
+
+            // Limpiar al finalizar
+            $this->cleanupWorker($workerId);
         });
+
+        $this->logger?->debug("Worker #{$workerId}: Health check coroutine iniciada (CID: {$coroutineId})");
     }
 
     /**
-     * Ciclo principal de health checks con control de parada
+     * Loop principal de health checks con control por Channel
      */
-    private function runHealthCheckLoop(Server $server, int $workerId): void
+    private function runHealthCheckLoop(Server $server, int $workerId, Channel $controlChannel): void
     {
-        $checkIntervalSec = $this->checkInterval / 1000;
-        $lastFullCheck = 0;
+        $this->logger?->debug("Worker #{$workerId}: Iniciando loop de health checks");
 
-        $this->logger->info("Worker #{$workerId}: Ciclo de health checks iniciado ({$checkIntervalSec}s)");
-
-        // Bucle principal controlado por flag de parada
-        while (!$this->shouldStop) {
-            $cycleStart = microtime(true);
-
-            try {
-                // 1. Verificar si el worker sigue activo (heartbeat interno)
-                if (!$this->isWorkerAlive($server, $workerId)) {
-                    $this->logger->warning("Worker #{$workerId}: Marcado como inactivo, deteniendo checks");
+        try {
+            while (true) {
+                // 1. Verificar si debemos detenernos
+                if ($this->shouldStop($controlChannel)) {
+                    $this->logger?->debug("Worker #{$workerId}: Señal de stop recibida");
                     break;
                 }
 
-                // 2. Ejecutar health checks
-                $this->performHealthChecks($workerId, $lastFullCheck);
+                // 2. Ejecutar health check
+                $checkStart = microtime(true);
+                $result = $this->performHealthChecks($workerId);
+                $checkDuration = microtime(true) - $checkStart;
 
-                // 3. Actualizar estadísticas
-                $this->runningWorkers[$workerId]['cycle_count']++;
+                // 3. Actualizar estadísticas del worker
                 $this->runningWorkers[$workerId]['last_check'] = time();
+                $this->runningWorkers[$workerId]['cycle_count']++;
+                $this->runningWorkers[$workerId]['last_duration'] = $checkDuration;
+                $this->runningWorkers[$workerId]['last_result'] = $result['overall_healthy'];
 
-            } catch (\Throwable $e) {
-                $this->logger->error("Worker #{$workerId}: Error en ciclo de health check", [
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
-                ]);
-            }
+                // 4. Manejar fallos consecutivos
+                if ($result['overall_healthy']) {
+                    $this->runningWorkers[$workerId]['consecutive_failures'] = 0;
+                    $this->runningWorkers[$workerId]['last_success'] = time();
+                    $this->logger?->debug("Worker #{$workerId}: Health check OK ({$checkDuration}s)");
+                } else {
+                    $this->runningWorkers[$workerId]['consecutive_failures']++;
+                    $this->runningWorkers[$workerId]['last_failure'] = time();
 
-            // 4. Calcular tiempo de espera dinámico
-            $cycleDuration = microtime(true) - $cycleStart;
-            $sleepTime = max(0.1, $checkIntervalSec - $cycleDuration);
+                    $failures = $this->runningWorkers[$workerId]['consecutive_failures'];
+                    $this->logger?->warning("Worker #{$workerId}: Health check FAILED ({$failures} consecutivos)");
 
-            // 5. Esperar con posibilidad de parada anticipada
-            $this->sleepWithInterrupt($sleepTime, $workerId);
-        }
-
-        $this->logger->info("Worker #{$workerId}: Ciclo de health checks finalizado");
-        unset($this->runningWorkers[$workerId]);
-    }
-
-    /**
-     * Sleep que puede ser interrumpido por señal de parada
-     */
-    private function sleepWithInterrupt(float $seconds, int $workerId): void
-    {
-        $chunkSize = 1.0; // Verificar cada segundo si hay que parar
-        $remaining = $seconds;
-
-        while ($remaining > 0 && !$this->shouldStop) {
-            $sleepTime = min($chunkSize, $remaining);
-            //Coroutine::sleep($sleepTime);
-            $this->safeSleep($sleepTime);
-            $remaining -= $sleepTime;
-
-            // Log periódico de actividad
-            if ($remaining > 0 && (int)$remaining % 10 == 0) {
-                $this->logger->debug("Worker #{$workerId}: Health check durmiendo, {$remaining}s restantes");
-            }
-        }
-    }
-
-    /**
-     * Señal para detener todos los health checks ordenadamente
-     */
-    public function stopGracefully(int $timeoutSec = 30): array
-    {
-        $this->logger->info("Iniciando parada graceful de health checks (timeout: {$timeoutSec}s)");
-        $this->shouldStop = true;
-
-        $startTime = time();
-        $activeWorkers = count($this->runningWorkers);
-
-        // Esperar a que todos los workers terminen
-        while (count($this->runningWorkers) > 0) {
-            if (time() - $startTime > $timeoutSec) {
-                $this->logger->warning("Timeout de parada graceful alcanzado, workers pendientes: " .
-                    count($this->runningWorkers));
-                break;
-            }
-
-            //Coroutine::sleep(1);
-            $this->safeSleep(1);
-
-            // Log cada 5 segundos
-            if ((time() - $startTime) % 5 == 0) {
-                $this->logger->info("Esperando finalización de health checks...", [
-                    'workers_restantes' => array_keys($this->runningWorkers),
-                    'tiempo_espera' => time() - $startTime
-                ]);
-            }
-        }
-
-        $result = [
-            'workers_iniciales' => $activeWorkers,
-            'workers_finales' => count($this->runningWorkers),
-            'tiempo_total' => time() - $startTime,
-            'timeout_alcanzado' => (time() - $startTime) >= $timeoutSec
-        ];
-
-        $this->logger->info("Parada graceful completada", $result);
-        return $result;
-    }
-
-    /**
-     * Verifica si un worker sigue activo en el servidor
-     */
-    private function isWorkerAlive(Server $server, int $workerId): bool
-    {
-        // Método 1: Verificar estadísticas del servidor
-        try {
-            $stats = $server->stats();
-            return true; // Si podemos obtener stats, el servidor está vivo
-        } catch (\Throwable) {
-            return false;
-        }
-
-        // Método alternativo: Comunicación entre workers (más avanzado)
-        // return $this->checkWorkerHeartbeat($workerId);
-    }
-
-    /**
-     *
-     * @param Connector $connector
-     * @return void
-     */
-    public function registerDatabaseCheck(Connector $connector): void
-    {
-        $this->connector = $connector;
-        $this->checks['database'] = [
-            'last_check' => 0,
-            'status' => 'unknown',
-            'details' => []
-        ];
-    }
-
-    /**
-     * @param Server $server
-     * @param int $workerId
-     * @return void
-     */
-    public function setupServerTick(\Swoole\Server $server, int $workerId): void
-    {
-        $this->logger->notice("Evaluando iniciar tick para health checks en worker #{$workerId} (Worker max: {$server->setting['worker_num']})");
-        // Solo ejecutar en workers principales (no task workers)
-        if ($workerId < $server->setting['worker_num']) {
-            $this->logger->notice("Iniciando tick para health checks en worker #{$workerId}");
-            // Iniciar el tick después de 10 segundos (para dar tiempo a la inicialización)
-           // Coroutine::sleep(10);
-            $this->safeSleep(10);
-            $this->startHealthCheckCycle($server, $workerId);
-        }
-    }
-
-    /**
-     * Performs health checks for the system, including database and memory checks.
-     *
-     * @param int $workerId The ID of the worker performing the health checks.
-     * @return void
-     */
-    public function performHealthChecks(int $workerId): void
-    {
-        if ($this->isChecking) {
-            $this->logger->debug("Worker #{$workerId}: Health check already in progress, skipping");
-            return;
-        }
-
-        $this->isChecking = true;
-        $startTime = microtime(true);
-
-        try {
-            $this->logger->debug("Worker #{$workerId}: Starting health checks");
-
-            // 1. Check de base de datos
-            if ($this->connector instanceof Connector) {
-                $this->performDatabaseHealthCheck($workerId);
-            }
-
-            // 2. Check de memoria (opcional)
-            $this->performMemoryCheck($workerId);
-
-            $duration = round((microtime(true) - $startTime) * 1000, 2);
-
-            // Log resumen solo periódicamente para no saturar
-            if (time() % 300 === 0) { // Cada 5 minutos
-                $this->logger->info("Worker #{$workerId}: Health checks completed in {$duration}ms", [
-                    'checks' => array_keys($this->checks),
-                    'statuses' => array_column($this->checks, 'status')
-                ]);
-            }
-
-        } catch (Throwable $e) {
-            $this->logger->error("Worker #{$workerId}: Health check failed: " . $e->getMessage());
-        } finally {
-            $this->isChecking = false;
-        }
-    }
-
-    private function performDatabaseHealthCheck(int $workerId): void
-    {
-        try {
-            $connector = $this->connector;
-            $currentTime = time();
-
-            // 1. ESTADO ACTUAL (siempre)
-            $currentStatus = $connector->getHealthStatus();
-
-            $this->checks['database'] = [
-                'last_check' => $currentTime,
-                'status' => $this->evaluateDatabaseStatus($currentStatus, $workerId),
-                'current_stats' => $currentStatus,
-                'timestamp' => $currentTime
-            ];
-
-            // 2. CHECK COMPLETO (cada 30 segundos usando comparación)
-            $lastFullCheck = $this->checks['database']['last_full_check'] ?? 0;
-
-            if ($currentTime - $lastFullCheck >= 30) {
-                $this->logger->debug("Worker #{$workerId}: Iniciando check completo de BD");
-
-                $startTime = microtime(true);
-                $connector->healthCheckLoadedConnections();
-
-                // 3. RECONEXIÓN PERIÓDICA (cada 5 minutos usando comparación)
-                $lastReconnect = $this->checks['database']['last_reconnect_attempt'] ?? 0;
-                $unreachableCount = $connector->getUnreachableCount();
-                $this->logger->debug("Last reconnect attempt: {$lastReconnect}, Unreachable connections: {$unreachableCount}, current timestamp: {$currentTime}");
-                if ($unreachableCount > 0 && ($currentTime - $lastReconnect) >= 300) {
-                    $this->logger->info("Worker #{$workerId}: Reintentando {$unreachableCount} conexiones caídas");
-                    $reconnectResult = $connector->reloadUnreachableConnections();
-
-                    $this->checks['database']['last_reconnect_attempt'] = $currentTime;
-                    $this->checks['database']['reconnect_result'] = $reconnectResult;
+                    // Si hay muchos fallos consecutivos, intentar recuperación
+                    if ($failures >= 3) {
+                        $this->handleConsecutiveFailures($workerId, $result);
+                    }
                 }
 
-                $duration = round((microtime(true) - $startTime) * 1000, 2);
-                $this->checks['database']['full_check'] = [
-                    'duration_ms' => $duration,
-                    'executed_at' => $currentTime
-                ];
-                $this->checks['database']['last_full_check'] = $currentTime;
+                // 5. Guardar en historial
+                $this->addToHistory([
+                    'worker_id' => $workerId,
+                    'timestamp' => time(),
+                    'duration' => $checkDuration,
+                    'healthy' => $result['overall_healthy'],
+                    'stats' => $result['pool_stats'] ?? []
+                ]);
+
+                // 6. Esperar hasta el próximo check con posibilidad de stop
+                $waitTime = $this->checkInterval / 1000; // ms a segundos
+                if (!$this->sleepWithStopCheck($waitTime, $controlChannel)) {
+                    break;
+                }
+            }
+        } catch (\Throwable $e) {
+            $this->logger?->error("Worker #{$workerId}: Error en health check loop: " . $e->getMessage());
+        } finally {
+            $this->logger?->info("Worker #{$workerId}: Loop de health checks finalizado");
+        }
+    }
+
+    /**
+     * Sleep que puede ser interrumpido por señal de stop
+     */
+    private function sleepWithStopCheck(float $seconds, Channel $controlChannel): bool
+    {
+        $endTime = microtime(true) + $seconds;
+
+        while (microtime(true) < $endTime && !$this->stopping) {
+            $remaining = $endTime - microtime(true);
+            $chunkTime = min(0.1, max(0.001, $remaining));
+
+            // Usar select para esperar con timeout O señal en el canal
+            $read = [$controlChannel];
+            $write = [];
+
+            $result = Coroutine::select($read, $write, $chunkTime);
+
+            // Si hay algo en el canal de lectura, es señal de stop
+            if (!empty($result['read'])) {
+                $message = $controlChannel->pop(0.001);
+                if ($message === 'stop' || $message === false) {
+                    return false; // Señal de stop recibida
+                }
             }
 
+            // Verificar flag stopping
+            if ($this->stopping) {
+                return false;
+            }
+        }
 
-        } catch (Throwable $e) {
-            $this->checks['database'] = [
-                'last_check' => time(),
-                'status' => 'error',
-                'error' => $e->getMessage(),
+        return true; // Sleep completado normalmente
+    }
+
+    /**
+     * Verifica si debemos detener el loop
+     */
+    private function shouldStop(Channel $controlChannel): bool
+    {
+        if ($this->stopping) {
+            return true;
+        }
+
+        // Verificar si hay mensaje en el canal (non-blocking)
+        $stats = $controlChannel->stats();
+        if ($stats['queue_num'] > 0) {
+            $message = $controlChannel->pop(0.001);
+            return $message === 'stop' || $message === false;
+        }
+
+        return false;
+    }
+
+    /**
+     * Maneja fallos consecutivos
+     */
+    private function handleConsecutiveFailures(int $workerId, array $checkResult): void
+    {
+        $failures = $this->runningWorkers[$workerId]['consecutive_failures'];
+        $this->logger?->warning("Worker #{$workerId}: {$failures} fallos consecutivos detectados");
+
+        // Intentar recuperar conexiones fallidas usando el método del Connector
+        try {
+            $recoveryResult = $this->connector->retryFailedConnections();
+
+            if ($recoveryResult['recovered'] > 0) {
+                $this->logger?->info("Worker #{$workerId}: Recuperadas {$recoveryResult['recovered']} conexiones");
+                $this->runningWorkers[$workerId]['consecutive_failures'] = 0;
+                $this->runningWorkers[$workerId]['recovery_attempts'] =
+                    ($this->runningWorkers[$workerId]['recovery_attempts'] ?? 0) + 1;
+            } else {
+                $this->logger?->warning("Worker #{$workerId}: No se pudieron recuperar conexiones");
+            }
+
+            // Notificar al canal de control principal
+            $this->notifyControlChannel('recovery_attempt', [
+                'worker_id' => $workerId,
+                'recovery_result' => $recoveryResult,
+                'consecutive_failures' => $failures,
                 'timestamp' => time()
-            ];
-            $this->logger->error("Worker #{$workerId}: Database health check error", [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
             ]);
+
+        } catch (\Exception $e) {
+            $this->logger?->error("Worker #{$workerId}: Error en recuperación: " . $e->getMessage());
         }
     }
 
     /**
-     * Retries connections that have previously failed permanently for a specified worker.
-     *
-     * @param int $workerId The unique identifier of the worker handling the retries.
-     * @return array An array representing the result of the retry attempts.
-     * @throws InvalidArgumentException
+     * Notifica al canal de control principal
      */
-    public function retryPermanentFailures(int $workerId): array
+    private function notifyControlChannel(string $type, array $data): void
     {
-        $this->logger->info("Retrying permanent failures for worker #{$workerId}:");
-        return $this->connector->retryFailedConnections();
+        try {
+            $this->controlChannel->push([
+                'type' => $type,
+                'data' => $data,
+                'timestamp' => time()
+            ], 0.1);
+        } catch (\Exception $e) {
+            // Canal lleno o cerrado, es normal durante shutdown
+        }
     }
 
-    private function evaluateDatabaseStatus(array $stats, $workerId): string
+    /**
+     * Detiene todos los health checks gracefulmente
+     */
+    public function stopGracefully(int $timeout = 5): array
     {
-        $this->logger->debug("WorkerId #{$workerId}: Evaluando estado de la base de datos: " . var_export($stats, true));
-        if ($stats['unreachable_connections'] > 0) {
-            return 'degraded';
+        if ($this->stopping) {
+            $this->logger?->warning("stopGracefully ya fue llamado anteriormente");
+            return ['status' => 'already_stopping', 'workers' => count($this->runningWorkers)];
         }
-        if ($stats['loaded_connections'] === 0) {
-            return 'critical';
-        }
-        return 'healthy';
-    }
 
-    private function performMemoryCheck(int $workerId): void
-    {
-        $memoryUsage = memory_get_usage(true);
-        $memoryPeak = memory_get_peak_usage(true);
-        $memoryLimit = ini_get('memory_limit');
+        $this->stopping = true;
+        $this->logger?->info("🛑 Iniciando stop graceful de health checks...");
 
-        $this->checks['memory'] = [
-            'last_check' => time(),
-            'usage_mb' => round($memoryUsage / 1024 / 1024, 2),
-            'peak_mb' => round($memoryPeak / 1024 / 1024, 2),
-            'limit' => $memoryLimit,
-            'status' => $this->evaluateMemoryStatus($memoryUsage, $memoryLimit)
+        $results = [
+            'total_workers' => count($this->workerControlChannels),
+            'workers_stopped' => 0,
+            'workers_failed' => 0,
+            'timeout' => false,
+            'timestamp' => time()
         ];
 
-        // Alertar si uso de memoria es alto
-        if ($this->checks['memory']['status'] === 'warning') {
-            $this->logger->warning("Worker #{$workerId}: High memory usage detected",
-                $this->checks['memory']);
-        }
-    }
+        $startTime = microtime(true);
 
-    private function evaluateMemoryStatus(int $usage, string $limit): string
-    {
-        $limitBytes = $this->convertToBytes($limit);
-        $usagePercent = ($limitBytes > 0) ? ($usage / $limitBytes) * 100 : 0;
-
-        if ($usagePercent > 90) {
-            return 'critical';
-        }
-
-        if ($usagePercent > 70) {
-            return 'warning';
+        // 1. Enviar señal de stop a todos los workers
+        foreach ($this->workerControlChannels as $workerId => $channel) {
+            try {
+                if ($channel->push('stop', 0.1)) {
+                    $this->logger?->debug("Señal 'stop' enviada al worker #{$workerId}");
+                    $results['workers_stopped']++;
+                } else {
+                    $this->logger?->warning("No se pudo enviar señal al worker #{$workerId} (canal lleno/cerrado)");
+                    $results['workers_failed']++;
+                }
+            } catch (\Exception $e) {
+                $this->logger?->error("Error enviando stop al worker #{$workerId}: " . $e->getMessage());
+                $results['workers_failed']++;
+            }
         }
 
-        return 'healthy';
-    }
+        // 2. Esperar que todos los workers terminen
+        $maxWaitTime = $timeout;
+        $pollInterval = 0.1; // 100ms
 
-    private function convertToBytes(string $value): int
-    {
-        $value = trim($value);
-        $last = strtolower($value[strlen($value) - 1]);
-        $int = (int)$value;
+        while (count($this->workerControlChannels) > 0) {
+            $elapsed = microtime(true) - $startTime;
 
-        switch ($last) {
-            case 'g':
-                $int *= 1024 * 1024 * 1024;
+            if ($elapsed > $maxWaitTime) {
+                $this->logger?->warning("Timeout de {$timeout}s esperando que workers terminen");
+                $results['timeout'] = true;
+                $results['workers_remaining'] = count($this->workerControlChannels);
                 break;
-            case 'm':
-                $int *= 1024 * 1024;
-                break;
-            case 'k':
-                $int *= 1024;
-                break;
+            }
+
+            $remaining = count($this->workerControlChannels);
+            if ($remaining > 0) {
+                $this->logger?->debug("Esperando que {$remaining} workers terminen... " .
+                    sprintf("(%.1fs/%.1fs)", $elapsed, $maxWaitTime));
+                Coroutine::sleep($pollInterval);
+            }
         }
 
-        return $int;
+        // 3. Cerrar todos los canales
+        $this->closeAllChannels();
+
+        $totalTime = microtime(true) - $startTime;
+        $this->logger?->info(sprintf(
+            "✅ Health checks detenidos. Tiempo total: %.2fs. Workers: %d/%d",
+            $totalTime,
+            $results['workers_stopped'],
+            $results['total_workers']
+        ));
+
+        $results['execution_time'] = $totalTime;
+        $results['stopping'] = $this->stopping;
+
+        return $results;
     }
 
     /**
-     * Retrieves the current health status of the system.
-     *
-     * @return array An associative array containing the health checks, the current timestamp, and the interval until the next check in seconds.
+     * Ejecuta los health checks
      */
-    public function getHealthStatus(): array
+    public function performHealthChecks(int $workerId = 0): array
     {
-        return [
-            'checks' => $this->checks,
+        $results = [
+            'worker_id' => $workerId,
             'timestamp' => time(),
-            'next_check_in' => $this->checkInterval / 1000 . ' seconds'
+            'overall_healthy' => true,
+            'checks' => []
         ];
-    }
 
-    public function getCheckInterval(): int
-    {
-        return $this->checkInterval;
+        try {
+            // 1. Obtener estadísticas de pools
+            $poolStats = $this->connector->getPoolStats();
+            $results['pool_stats'] = $poolStats;
+
+            // 2. Obtener estado de salud
+            $healthStatus = $this->connector->getHealthStatus();
+            $results['health_status'] = $healthStatus;
+
+            // 3. Evaluar salud general basado en pools
+            foreach ($poolStats as $poolName => $stats) {
+                $poolHealthy = true;
+                $poolDetails = ['name' => $poolName];
+
+                // Verificar conexiones activas
+                if (isset($stats['active']) && $stats['active'] === 0) {
+                    $poolHealthy = false;
+                    $poolDetails['error'] = 'No hay conexiones activas';
+                }
+
+                // Verificar conexiones en espera (si aplica)
+                if (isset($stats['waiting']) && $stats['waiting'] > 10) {
+                    $poolDetails['warning'] = "Muchas conexiones en espera: {$stats['waiting']}";
+                }
+
+                // Verificar errores recientes
+                if (isset($stats['errors']) && $stats['errors'] > 0) {
+                    $poolDetails['errors'] = $stats['errors'];
+                    if ($stats['errors'] > 5) {
+                        $poolHealthy = false;
+                    }
+                }
+
+                $results['checks'][$poolName] = [
+                    'healthy' => $poolHealthy,
+                    'details' => $poolDetails
+                ];
+
+                if (!$poolHealthy) {
+                    $results['overall_healthy'] = false;
+                }
+            }
+
+            // 4. Verificar estado general del connector
+            if (isset($healthStatus['status']) && $healthStatus['status'] !== 'healthy') {
+                $results['overall_healthy'] = false;
+                $results['connector_status'] = $healthStatus['status'];
+            }
+
+        } catch (\Exception $e) {
+            $this->logger?->error("Worker #{$workerId}: Error en health check: " . $e->getMessage());
+            $results['error'] = $e->getMessage();
+            $results['overall_healthy'] = false;
+        }
+
+        return $results;
     }
 
     /**
-     * Calcula offset único para cada worker basado en:
-     * 1. ID del worker
-     * 2. Número total de workers
-     * 3. Intervalo de checks
-     * 4. Evitar colisiones
+     * Retry de fallos permanentes usando el Connector
+     */
+    public function retryPermanentFailures(int $workerId = 0): array
+    {
+        $this->logger?->info("Worker #{$workerId}: Intentando recuperar conexiones fallidas");
+
+        try {
+            // Usar el método del Connector para recuperar conexiones
+            $result = $this->connector->retryFailedConnections();
+
+            $this->logger?->info(sprintf(
+                "Worker #{$workerId}: Recuperación - Intentadas: %d, Recuperadas: %d, Fallidas: %d",
+                $result['attempted'] ?? 0,
+                $result['recovered'] ?? 0,
+                $result['failed'] ?? 0
+            ));
+
+            // Resetear contador de fallos consecutivos si hubo recuperaciones
+            if (isset($result['recovered']) && $result['recovered'] > 0 && isset($this->runningWorkers[$workerId])) {
+                $this->runningWorkers[$workerId]['consecutive_failures'] = 0;
+                $this->runningWorkers[$workerId]['last_recovery'] = time();
+            }
+
+            return $result;
+
+        } catch (\Exception $e) {
+            $this->logger?->error("Worker #{$workerId}: Error en retryPermanentFailures: " . $e->getMessage());
+            return [
+                'attempted' => 0,
+                'recovered' => 0,
+                'failed' => 1,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Calcula offset escalonado para workers
      */
     private function calculateWorkerOffset(int $workerId, int $totalWorkers): float
     {
-        // Configuración de escalonamiento
-        $baseStagger = 7; // Segundos base entre workers
-        $maxOffset = 30; // Máximo offset en segundos
-
-        // Fórmula para distribución uniforme
         if ($totalWorkers <= 1) {
-            return 0; // Sin escalonamiento si solo hay un worker
+            return 0;
         }
 
-        // Opción 1: Distribución lineal simple
-        // $offset = ($workerId % $totalWorkers) * $baseStagger;
+        // Distribuir checks en el intervalo completo
+        $baseInterval = $this->checkInterval / 1000; // en segundos
+        $offset = ($workerId % $totalWorkers) * ($baseInterval / $totalWorkers);
 
-        // Opción 2: Distribución usando número primo para mejor dispersión
-        //  $primeMultiplier = 11; // Número primo para evitar patrones
-        // $offset = ($workerId * $primeMultiplier) % $maxOffset;
-
-        // Opción 3: Offset basado en hash del worker ID (más aleatorio)
-        $hash = crc32((string)$workerId);
-        $offset = ($hash % $maxOffset);
-
-        // Asegurar que no sea cero para todos excepto primer worker
-        if ($workerId > 0 && $offset === 0) {
-            $offset = min($baseStagger, $maxOffset - 1);
-        }
-
-        $this->logger->debug("Worker #{$workerId}: Offset calculado = {$offset}s", [
-            'total_workers' => $totalWorkers,
-            'strategy' => 'hash-based'
-        ]);
-
-        return (float)$offset;
+        return min($offset, $baseInterval * 0.8); // Máximo 80% del intervalo
     }
 
     /**
-     * Escalonamiento adaptativo basado en carga del sistema
+     * Agrega entrada al historial
      */
-    public function calculateAdaptiveOffset(int $workerId, array $systemLoad): float
+    private function addToHistory(array $entry): void
     {
-        $baseOffset = 5.0;
+        $this->checkHistory[] = $entry;
 
-        // Factor basado en carga de CPU
-        $cpuFactor = 1.0;
-        if (isset($systemLoad['cpu_percent'])) {
-            if ($systemLoad['cpu_percent'] > 80) {
-                $cpuFactor = 1.5; // Aumentar offset si CPU alta
-            } elseif ($systemLoad['cpu_percent'] < 20) {
-                $cpuFactor = 0.7; // Reducir offset si CPU baja
+        // Mantener tamaño limitado
+        if (count($this->checkHistory) > self::MAX_HISTORY) {
+            array_shift($this->checkHistory);
+        }
+    }
+
+    /**
+     * Limpia los recursos de un worker
+     */
+    private function cleanupWorker(int $workerId): void
+    {
+        // Cerrar canal de control
+        if (isset($this->workerControlChannels[$workerId])) {
+            try {
+                $this->workerControlChannels[$workerId]->close();
+            } catch (\Exception $e) {
+                // Ignorar errores al cerrar
+            }
+            unset($this->workerControlChannels[$workerId]);
+        }
+
+        // Remover de tracking
+        unset($this->workerCoroutineIds[$workerId]);
+
+        // Marcar como detenido (no eliminar para mantener historial)
+        if (isset($this->runningWorkers[$workerId])) {
+            $this->runningWorkers[$workerId]['status'] = 'stopped';
+            $this->runningWorkers[$workerId]['stopped_at'] = time();
+        }
+
+        $this->logger?->debug("Worker #{$workerId}: Recursos limpiados");
+    }
+
+    /**
+     * Cierra todos los canales de control
+     */
+    private function closeAllChannels(): void
+    {
+        foreach ($this->workerControlChannels as $workerId => $channel) {
+            try {
+                $channel->close();
+                $this->logger?->debug("Canal cerrado para worker #{$workerId}");
+            } catch (\Exception $e) {
+                $this->logger?->error("Error cerrando canal worker #{$workerId}: " . $e->getMessage());
             }
         }
 
-        // Factor basado en memoria
-        $memoryFactor = 1.0;
-        if (isset($systemLoad['memory_percent']) && $systemLoad['memory_percent'] > 85) {
-            $memoryFactor = 1.3;
+        $this->workerControlChannels = [];
+        $this->workerCoroutineIds = [];
+
+        // También cerrar canal principal
+        try {
+            $this->controlChannel->close();
+        } catch (\Exception $e) {
+            // Ignorar
+        }
+    }
+
+    /**
+     * Obtiene estado de salud actual
+     */
+    public function getHealthStatus(): array
+    {
+        $activeWorkers = array_filter(
+            $this->runningWorkers,
+            fn($worker) => ($worker['status'] ?? '') === 'running'
+        );
+
+        return [
+            'running_workers' => count($activeWorkers),
+            'total_workers' => count($this->runningWorkers),
+            'stopping' => $this->stopping,
+            'active_coroutines' => count($this->workerCoroutineIds),
+            'active_channels' => count($this->workerControlChannels),
+            'check_interval_ms' => $this->checkInterval,
+            'check_history_count' => count($this->checkHistory),
+            'last_check' => end($this->checkHistory) ?: null,
+            'timestamp' => time()
+        ];
+    }
+
+    /**
+     * Obtiene estadísticas detalladas por worker
+     */
+    public function getWorkerStats(): array
+    {
+        $stats = [];
+
+        foreach ($this->runningWorkers as $workerId => $info) {
+            $stats[$workerId] = [
+                'status' => $info['status'] ?? 'unknown',
+                'started_at' => $info['started_at'] ?? 0,
+                'stopped_at' => $info['stopped_at'] ?? null,
+                'last_check' => $info['last_check'] ?? 0,
+                'cycle_count' => $info['cycle_count'] ?? 0,
+                'last_duration' => $info['last_duration'] ?? 0,
+                'consecutive_failures' => $info['consecutive_failures'] ?? 0,
+                'last_success' => $info['last_success'] ?? 0,
+                'last_failure' => $info['last_failure'] ?? 0,
+                'recovery_attempts' => $info['recovery_attempts'] ?? 0,
+                'last_recovery' => $info['last_recovery'] ?? 0,
+                'has_channel' => isset($this->workerControlChannels[$workerId]),
+                'coroutine_id' => $this->workerCoroutineIds[$workerId] ?? null,
+                'last_result' => $info['last_result'] ?? null
+            ];
         }
 
-        // Factor basado en hora del día (ej: evitar horas pico)
-        $timeFactor = 1.0;
-        $hour = date('G');
-        if ($hour >= 9 && $hour <= 17) {
-            $timeFactor = 1.2; // Horario laboral
+        return $stats;
+    }
+
+    /**
+     * Obtiene historial de checks
+     */
+    public function getCheckHistory(int $limit = 20): array
+    {
+        return array_slice($this->checkHistory, -$limit);
+    }
+
+    /**
+     * Destructor - asegura limpieza
+     */
+    public function __destruct()
+    {
+        if (!$this->stopping && !empty($this->workerControlChannels)) {
+            $this->logger?->warning("HealthManager destruido sin stopGracefully(), limpiando canales");
+            $this->closeAllChannels();
         }
-
-        $finalOffset = $baseOffset * $cpuFactor * $memoryFactor * $timeFactor;
-
-        // Aplicar variación por worker ID
-        $workerVariation = ($workerId % 10) * 0.3;
-        $finalOffset += $workerVariation;
-
-        // Limitar offset máximo
-        $finalOffset = min($finalOffset, 60.0); // Máximo 60 segundos
-
-        return round($finalOffset, 1);
     }
 }
