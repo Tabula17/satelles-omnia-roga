@@ -20,8 +20,6 @@ use Swoole\Timer;
  * such as database and memory health inspections. The class also handles graceful stopping of health checks
  * to ensure a clean shutdown process.
  */
-
-
 class HealthManager
 {
     private Connector $connector;
@@ -42,10 +40,11 @@ class HealthManager
     private const MAX_HISTORY = 100;
 
     public function __construct(
-        Connector $connector,
-        int $checkInterval = 30000, // 30 segundos por defecto
+        Connector                         $connector,
+        int                               $checkInterval = 30000, // 30 segundos por defecto
         private readonly ?LoggerInterface $logger = null
-    ) {
+    )
+    {
         $this->connector = $connector;
         $this->checkInterval = $checkInterval;
 
@@ -78,6 +77,11 @@ class HealthManager
      */
     public function startHealthCheckCycle(Server $server, int $workerId): void
     {
+        // Verificar si es worker principal (no task worker)
+        if ($workerId >= $server->setting['worker_num']) {
+            $this->logger?->debug("Worker #{$workerId} es task worker, omitiendo health checks");
+            return;
+        }
         // Registrar worker
         $this->runningWorkers[$workerId] = [
             'started_at' => microtime(true),
@@ -189,6 +193,7 @@ class HealthManager
             $this->logger?->info("Worker #{$workerId}: Loop de health checks finalizado");
         }
     }
+
     /**
      * Sleep que puede ser interrumpido por señal de stop (versión para Swoole original)
      */
@@ -236,6 +241,7 @@ class HealthManager
 
         return false;
     }
+
     /**
      * Maneja fallos consecutivos
      */
