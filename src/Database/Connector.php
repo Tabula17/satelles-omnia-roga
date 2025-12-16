@@ -21,6 +21,7 @@ use Throwable;
 class Connector
 {
     use CoroutineHelper;
+
     //protected(set) PoolCollection $pools ;
     private array $poolCount = [];
     private array $usedConnections = [];
@@ -132,7 +133,7 @@ class Connector
             }
         } else {
             $cfg = $config->toArray();
-            if(array_key_exists('password', $cfg)) {
+            if (array_key_exists('password', $cfg)) {
                 $cfg['password'] = '********';
             }
             $this->logger?->warning("⚠️ Connection test failed: $config->name", $cfg);
@@ -151,6 +152,7 @@ class Connector
         $this->unreachableConnections->clear();
         return $this->reloadConnections($connections, $maxRetries);
     }
+
     /**
      * @throws InvalidArgumentException
      */
@@ -232,12 +234,13 @@ class Connector
         }
         return $this->reloadConnections($connections, $maxRetries);
     }
+
     public function healthCheckLoadedConnections(): void
     {
         foreach ($this->loadedConnections as $config) {
             if (!$config->canConnect()) {
                 $cfg = $config->toArray();
-                if(array_key_exists('password', $cfg)) {
+                if (array_key_exists('password', $cfg)) {
                     $cfg['password'] = '********';
                 }
                 $this->logger?->warning("🚦 Connection test failed: $config->name", $cfg);
@@ -494,7 +497,12 @@ class Connector
         $i = 1;
         $total = $this->poolCount[$name] ?? 0;
         if ($total > 0) {
-            $this->getPool($name)?->close();
+            $pool = $this->getPool($name);
+            if (($pool instanceof PDOPoolExtended) && !$pool->isDestroyed()) {
+                $pool->close();
+                return;
+            }
+            $pool?->close();
         }
     }
 
@@ -506,6 +514,10 @@ class Connector
     public function closeAllPools(): void
     {
         foreach ($this->pools as $pool) {
+            if (($pool instanceof PDOPoolExtended) && !$pool->isDestroyed()) {
+                $pool->close();
+                return;
+            }
             $pool?->close();
         }
     }
