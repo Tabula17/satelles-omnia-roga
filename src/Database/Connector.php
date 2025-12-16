@@ -506,7 +506,7 @@ class Connector
     public function closeAllPools(): void
     {
         foreach ($this->pools as $pool) {
-            $pool->close();
+            $pool?->close();
         }
     }
 
