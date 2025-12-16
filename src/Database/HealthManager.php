@@ -189,30 +189,23 @@ class HealthManager
             $this->logger?->info("Worker #{$workerId}: Loop de health checks finalizado");
         }
     }
-
     /**
-     * Sleep que puede ser interrumpido por señal de stop
+     * Sleep que puede ser interrumpido por señal de stop (versión para Swoole original)
      */
-    private function sleepWithStopCheck(float $seconds, Channel $controlChannel): bool
+    private function sleepWithStopCheck(float $seconds, \Swoole\Coroutine\Channel $controlChannel): bool
     {
         $endTime = microtime(true) + $seconds;
 
         while (microtime(true) < $endTime && !$this->stopping) {
             $remaining = $endTime - microtime(true);
-            $chunkTime = min(0.1, max(0.001, $remaining));
+            $chunkTime = min(0.5, max(0.001, $remaining)); // Bloques de max 0.5s
 
-            // Usar select para esperar con timeout O señal en el canal
-            $read = [$controlChannel];
-            $write = [];
+            // Intentar leer del canal de control con un timeout corto
+            // Si llega el mensaje 'stop', salir inmediatamente
+            $message = $controlChannel->pop($chunkTime);
 
-            $result = Coroutine::select($read, $write, $chunkTime);
-
-            // Si hay algo en el canal de lectura, es señal de stop
-            if (!empty($result['read'])) {
-                $message = $controlChannel->pop(0.001);
-                if ($message === 'stop' || $message === false) {
-                    return false; // Señal de stop recibida
-                }
+            if ($message === 'stop' || $message === false) {
+                return false; // Señal de stop recibida o canal cerrado
             }
 
             // Verificar flag stopping
@@ -225,24 +218,24 @@ class HealthManager
     }
 
     /**
-     * Verifica si debemos detener el loop
+     * Verifica si debemos detener el loop (versión para Swoole original)
      */
-    private function shouldStop(Channel $controlChannel): bool
+    private function shouldStop(\Swoole\Coroutine\Channel $controlChannel): bool
     {
         if ($this->stopping) {
             return true;
         }
 
-        // Verificar si hay mensaje en el canal (non-blocking)
-        $stats = $controlChannel->stats();
-        if ($stats['queue_num'] > 0) {
-            $message = $controlChannel->pop(0.001);
-            return $message === 'stop' || $message === false;
+        // Verificar de forma NO BLOQUEANTE si hay mensaje en el canal
+        // pop() con timeout 0 devuelve inmediatamente
+        $message = $controlChannel->pop(0);
+
+        if ($message === 'stop' || $message === false) {
+            return true; // Señal de stop recibida o canal cerrado
         }
 
         return false;
     }
-
     /**
      * Maneja fallos consecutivos
      */
