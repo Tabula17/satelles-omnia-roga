@@ -514,8 +514,7 @@ class Connector
     public function closeAllPools(): void
     {
         foreach ($this->pools as $pool) {
-            if (($pool instanceof PDOPoolExtended) && !$pool->isDestroyed()) {
-                $pool->close();
+            if (($pool instanceof PDOPoolExtended) && $pool->isDestroyed()) {
                 return;
             }
             $pool?->close();
