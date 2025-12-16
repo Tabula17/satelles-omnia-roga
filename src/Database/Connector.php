@@ -494,12 +494,10 @@ class Connector
 
     public function closePool(string $name): void
     {
-        $i = 1;
         $total = $this->poolCount[$name] ?? 0;
         if ($total > 0) {
             $pool = $this->getPool($name);
-            if (($pool instanceof PDOPoolExtended) && !$pool->isDestroyed()) {
-                $pool->close();
+            if (($pool instanceof PDOPoolExtended) && $pool->isDestroyed()) {
                 return;
             }
             $pool?->close();
@@ -514,6 +512,7 @@ class Connector
     public function closeAllPools(): void
     {
         foreach ($this->pools as $pool) {
+            $this->logger?->debug("🔑 Closing pool: " . $pool->poolName);
             if (($pool instanceof PDOPoolExtended) && $pool->isDestroyed()) {
                 return;
             }
@@ -524,6 +523,9 @@ class Connector
     public function fillAllPools(): void
     {
         foreach ($this->pools as $pool) {
+            if (($pool instanceof PDOPoolExtended) && $pool->isDestroyed()) {
+                return;
+            }
             $pool->fill();
         }
     }
