@@ -125,7 +125,11 @@ class HealthManager implements HealthManagerInterface
             while (true) {
                 // 1. Verificar si debemos detenernos
                 if ($this->shouldStop($controlChannel)) {
-                    $this->logger?->debug("Worker #{$workerId}: Señal de stop recibida");
+                    if(!$this->isInCoroutine()){
+                        $this->logger?->notice("Worker #{$workerId}: Deteniendo loop de health checks. Corutina cerrada");
+                    }else {
+                        $this->logger?->debug("Worker #{$workerId}: Señal de stop recibida");
+                    }
                     break;
                 }
 
@@ -213,7 +217,7 @@ class HealthManager implements HealthManagerInterface
      */
     private function shouldStop(Channel $controlChannel): bool
     {
-        if ($this->stopping) {
+        if ($this->stopping || !$this->isInCoroutine()) {
             return true;
         }
 
