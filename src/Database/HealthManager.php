@@ -133,6 +133,7 @@ class HealthManager implements HealthManagerInterface
                 $result = $this->performHealthChecks($workerId);
                 $checkDuration = microtime(true) - $checkStart;
 
+                $this->logger?->debug("Worker #{$workerId}: Health check completado en {$checkDuration}s");
                 // 3. Actualizar estadísticas del worker
                 $this->runningWorkers[$workerId]['last_check'] = time();
                 $this->runningWorkers[$workerId]['cycle_count']++;
