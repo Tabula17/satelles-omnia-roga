@@ -87,9 +87,7 @@ class HealthManager implements HealthManagerInterface
         // Iniciar la coroutine de health checks
         $coroutineId = Coroutine::create(function () use ($server, $workerId, $offset, $workerControlChannel) {
             $this->workerCoroutineIds[$workerId] = Coroutine::getCid();
-
             $this->logger?->info("👷 Worker #{$workerId}: Health checks iniciarán en {$offset}s");
-
             // Esperar offset escalonado
             if ($offset > 0 && !$this->sleepWithStopCheck($offset, $workerControlChannel)) {
                 $this->cleanupWorker($workerId);
@@ -100,13 +98,10 @@ class HealthManager implements HealthManagerInterface
                 $this->cleanupWorker($workerId);
                 return;
             }
-
             // Cambiar estado a running
             $this->runningWorkers[$workerId]['status'] = 'running';
-
             // Ejecutar loop principal
             $this->runHealthCheckLoop($server, $workerId, $workerControlChannel);
-
             // Limpiar al finalizar
             $this->cleanupWorker($workerId);
         });
@@ -174,6 +169,7 @@ class HealthManager implements HealthManagerInterface
                 // 6. Esperar hasta el próximo check con posibilidad de stop
                 $waitTime = $this->checkInterval / 1000; // ms a segundos
                 if (!$this->sleepWithStopCheck($waitTime, $controlChannel)) {
+                    $this->logger?->debug("Worker #{$workerId}: Sleep interrumpido por stop ");
                     break;
                 }
             }
