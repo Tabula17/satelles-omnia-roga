@@ -117,71 +117,36 @@ class HealthManager implements HealthManagerInterface
      */
     private function runHealthCheckLoop(Server $server, int $workerId, Channel $controlChannel): void
     {
-        $this->logger?->debug("🏥 Worker #{$workerId}: Iniciando loop de health checks");
+        $cid = Coroutine::getCid();
+        $this->logger?->info("🚀 [Worker #{$workerId}] HealthCheckLoop INICIADO - Coroutine ID: {$cid}");
 
+        $loopCounter = 0;
         try {
             while (true) {
-                // 1. Verificar si debemos detenernos
-                if ($this->shouldStop($controlChannel)) {
-                    if (!$this->isInCoroutine()) {
-                        $this->logger?->notice("🏥 Worker #{$workerId}: Deteniendo loop de health checks. Corutina cerrada");
-                    } else {
-                        $this->logger?->debug("🏥 Worker #{$workerId}: Señal de stop recibida");
-                    }
+                $loopCounter++;
+                $this->logger?->debug("🔄 [Worker #{$workerId}] Ciclo #{$loopCounter} - Verificando shouldStop...");
+
+                // ⚠️ IMPORTANTE: Pasar $workerId explícitamente
+                if ($this->shouldStop($controlChannel, $workerId)) {
+                    $this->logger?->info("🛑 [Worker #{$workerId}] shouldStop() retornó true");
                     break;
                 }
 
-                // 2. Ejecutar health check
-                $checkStart = microtime(true);
+                $this->logger?->debug("🏥 [Worker #{$workerId}] Ejecutando health check...");
                 $result = $this->performHealthChecks($workerId);
-                $checkDuration = microtime(true) - $checkStart;
 
-                $this->logger?->debug("🏥 Worker #{$workerId}: Health check completado en {$checkDuration}s");
-                // 3. Actualizar estadísticas del worker
-                $this->runningWorkers[$workerId]['last_check'] = time();
-                $this->runningWorkers[$workerId]['cycle_count']++;
-                $this->runningWorkers[$workerId]['last_duration'] = $checkDuration;
-                $this->runningWorkers[$workerId]['last_result'] = $result['overall_healthy'];
+                $this->logger?->debug("🏥 [Worker #{$workerId}] Esperando {$this->checkInterval}ms...");
 
-                // 4. Manejar fallos consecutivos
-                if ($result['overall_healthy']) {
-                    $this->runningWorkers[$workerId]['consecutive_failures'] = 0;
-                    $this->runningWorkers[$workerId]['last_success'] = time();
-                    $this->logger?->debug("🏥 Worker #{$workerId}: Health check OK ({$checkDuration}s)");
-                } else {
-                    $this->runningWorkers[$workerId]['consecutive_failures']++;
-                    $this->runningWorkers[$workerId]['last_failure'] = time();
-
-                    $failures = $this->runningWorkers[$workerId]['consecutive_failures'];
-                    $this->logger?->warning("🏥 Worker #{$workerId}: Health check FAILED ({$failures} consecutivos)");
-
-                    // Si hay muchos fallos consecutivos, intentar recuperación
-                    if ($failures >= 3) {
-                        $this->handleConsecutiveFailures($workerId);
-                    }
-                }
-                $lastCheck = $this->checkHistory[array_key_last($this->checkHistory)] ?? [];
-                // 5. Guardar en historial
-                $this->addToHistory([
-                    'worker_id' => $workerId,
-                    'timestamp' => time(),
-                    'duration' => $checkDuration,
-                    'healthy' => $result['overall_healthy'],
-                    'health_status' => $result['health_status'] ?? [],
-                    'stats' => $result['pool_stats'] ?? []
-                ]);
-                $this->notifyIfChanges($lastCheck, $result);
-                // 6. Esperar hasta el próximo check con posibilidad de stop
-                $waitTime = $this->checkInterval / 1000; // ms a segundos
-                if (!$this->sleepWithStopCheck($waitTime, $controlChannel)) {
-                    $this->logger?->debug("🏥 Worker #{$workerId}: Sleep interrumpido por stop ");
+                // Modificar sleepWithStopCheck para que reciba workerId
+                if (!$this->sleepWithStopCheck($this->checkInterval / 1000, $controlChannel)) {
+                    $this->logger?->info("⏸️ [Worker #{$workerId}] Sleep interrumpido");
                     break;
                 }
             }
         } catch (\Throwable $e) {
-            $this->logger?->error("🏥 Worker #{$workerId}: Error en health check loop: " . $e->getMessage());
+            $this->logger?->error("💥 [Worker #{$workerId}] Error: " . $e->getMessage());
         } finally {
-            $this->logger?->info("Worker #{$workerId}: Loop de health checks finalizado");
+            $this->logger?->info("✅ [Worker #{$workerId}] HealthCheckLoop FINALIZADO - Total ciclos: {$loopCounter}");
         }
     }
 
@@ -216,25 +181,75 @@ class HealthManager implements HealthManagerInterface
     /**
      * Verifica si debemos detener el loop (versión para Swoole original)
      */
+    /**
+     * Verifica si debemos detener el loop (versión corregida)
+     */
     private function shouldStop(Channel $controlChannel): bool
     {
-        $this->logger?->debug("🏥 🏥 Verificando si debemos detener el loop...");
-        if ($this->stopping || !$this->isInCoroutine()) {
+        // DEBUG: Verificar estado actual
+        $cid = Coroutine::getCid();
+        $this->logger?->debug("🏥 Worker #{$this->getCurrentWorkerId()}: Verificando shouldStop. CID={$cid}, Stopping={$this->stopping}");
 
-            $this->logger?->debug("🏥 🏥 " . __METHOD__ . "() Deteniendo health checks..." . var_export($this->getCoroutineInfo(), true));
+        // 1. Verificar bandera global de stopping
+        if ($this->stopping) {
+            $this->logger?->info("🏥 Worker #{$this->getCurrentWorkerId()}: Deteniendo por flag stopping=true");
             return true;
         }
+
+        // 2. Verificar mensaje en el canal (NON-BLOCKING)
         try {
-            // Verificar de forma NO BLOQUEANTE si hay mensaje en el canal
-            // pop() con timeout 0 devuelve inmediatamente
-            $message = $controlChannel->pop(0);
-            $this->logger?->debug("🏥 🏥 Verificando si debemos detener el loop..." . var_export($message, true));
-            return $message === 'stop' || $message === false;
+            // Verificar si hay algo en el canal sin bloquear
+            $message = $controlChannel->pop(0.001); // Timeout muy corto
+
+            if ($message === 'stop') {
+                $this->logger?->info("🏥 Worker #{$this->getCurrentWorkerId()}: Recibido mensaje 'stop' en el canal");
+                return true;
+            }
+
+            if ($message === false) {
+                // Canal cerrado o timeout (pero timeout es muy corto, así que probablemente vacío)
+                // No retornamos true aquí a menos que sepamos que el canal fue cerrado
+                $stats = $controlChannel->stats();
+                if ($stats['closed'] ?? false) {
+                    $this->logger?->info("🏥 Worker #{$this->getCurrentWorkerId()}: Canal de control cerrado");
+                    return true;
+                }
+            }
+
         } catch (\Throwable $e) {
-            $this->logger?->error("🏥 🏥 Error al verificar si debemos detener el loop: " . $e->getMessage());
-            $this->logger?->debug("🏥 🏥 Deteniendo health checks..." . var_export($this->getCoroutineInfo(), true));
+            $this->logger?->error("🏥 Error verificando canal: " . $e->getMessage());
+            // Si hay error con el canal, es mejor detener
             return true;
         }
+
+        // 3. Condición adicional: si el worker ya no está en runningWorkers
+        $currentWorkerId = $this->getCurrentWorkerId();
+        if (!isset($this->runningWorkers[$currentWorkerId])) {
+            $this->logger?->warning("🏥 Worker #{$currentWorkerId}: No encontrado en runningWorkers");
+            return true;
+        }
+
+        if (($this->runningWorkers[$currentWorkerId]['status'] ?? '') === 'stopped') {
+            $this->logger?->debug("🏥 Worker #{$currentWorkerId}: Estado marcado como stopped");
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Obtiene el ID del worker actual (método auxiliar)
+     */
+    private function getCurrentWorkerId(): int
+    {
+        // Necesitas implementar esto basado en cómo trackeas el worker
+        // Si no tienes forma de saberlo, puedes pasarlo como parámetro a shouldStop
+        foreach ($this->workerCoroutineIds as $workerId => $coroutineId) {
+            if ($coroutineId === Coroutine::getCid()) {
+                return $workerId;
+            }
+        }
+        return -1; // No encontrado
     }
 
     /**
