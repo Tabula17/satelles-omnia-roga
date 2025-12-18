@@ -218,10 +218,10 @@ class HealthManager implements HealthManagerInterface
      */
     private function shouldStop(Channel $controlChannel): bool
     {
+        $this->logger?->debug("🏥 🏥 Verificando si debemos detener el loop...");
         if ($this->stopping || !$this->isInCoroutine()) {
             return true;
         }
-        $this->logger?->debug("🏥 🏥 Verificando si debemos detener el loop...");
         try {
             // Verificar de forma NO BLOQUEANTE si hay mensaje en el canal
             // pop() con timeout 0 devuelve inmediatamente
