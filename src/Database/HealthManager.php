@@ -126,30 +126,80 @@ class HealthManager implements HealthManagerInterface
                 $loopCounter++;
                 $this->logger?->debug("🔄 [Worker #{$workerId}] Ciclo #{$loopCounter} - Verificando shouldStop...");
 
-                // ⚠️ IMPORTANTE: Pasar $workerId explícitamente
                 if ($this->shouldStop($controlChannel, $workerId)) {
                     $this->logger?->info("🛑 [Worker #{$workerId}] shouldStop() retornó true");
                     break;
                 }
 
                 $this->logger?->debug("🏥 [Worker #{$workerId}] Ejecutando health check...");
+                $checkStart = microtime(true);
                 $result = $this->performHealthChecks($workerId);
+                $checkDuration = microtime(true) - $checkStart;
+
+                // Actualizar estadísticas del worker
+                $this->runningWorkers[$workerId]['last_check'] = time();
+                $this->runningWorkers[$workerId]['cycle_count'] = $loopCounter;
+                $this->runningWorkers[$workerId]['last_duration'] = $checkDuration;
+                $this->runningWorkers[$workerId]['last_result'] = $result['overall_healthy'];
+
+                // Manejar fallos consecutivos (PARTE CRUCIAL QUE FALTABA)
+                if ($result['overall_healthy']) {
+                    $this->runningWorkers[$workerId]['consecutive_failures'] = 0;
+                    $this->runningWorkers[$workerId]['last_success'] = time();
+                    $this->logger?->debug("🏥 [Worker #{$workerId}] Health check OK ({$checkDuration}s)");
+                } else {
+                    $this->runningWorkers[$workerId]['consecutive_failures']++;
+                    $this->runningWorkers[$workerId]['last_failure'] = time();
+
+                    $failures = $this->runningWorkers[$workerId]['consecutive_failures'];
+                    $this->logger?->warning("🏥 [Worker #{$workerId}] Health check FAILED ({$failures} consecutivos)");
+
+                    // Si hay muchos fallos consecutivos, intentar recuperación
+                    if ($failures >= 3) {
+                        $this->logger?->warning("🏥 [Worker #{$workerId}] 3+ fallos consecutivos, intentando recuperación...");
+                        $this->handleConsecutiveFailures($workerId);
+                    }
+                }
+
+                // Guardar en historial
+                $lastCheck = $this->checkHistory[array_key_last($this->checkHistory)] ?? [];
+                $this->addToHistory([
+                    'worker_id' => $workerId,
+                    'timestamp' => time(),
+                    'duration' => $checkDuration,
+                    'healthy' => $result['overall_healthy'],
+                    'health_status' => $result['health_status'] ?? [],
+                    'stats' => $result['pool_stats'] ?? []
+                ]);
+
+                // Notificar cambios si hay notificador configurado
+                if (isset($this->notifier)) {
+                    $this->notifyIfChanges($lastCheck, $result);
+                }
 
                 $this->logger?->debug("🏥 [Worker #{$workerId}] Esperando {$this->checkInterval}ms...");
 
-                // Modificar sleepWithStopCheck para que reciba workerId
-                if (!$this->sleepWithStopCheck($this->checkInterval / 1000, $controlChannel)) {
+                if (!$this->sleepWithStopCheck($this->checkInterval / 1000, $controlChannel, $workerId)) {
                     $this->logger?->info("⏸️ [Worker #{$workerId}] Sleep interrumpido");
                     break;
                 }
             }
         } catch (\Throwable $e) {
-            $this->logger?->error("💥 [Worker #{$workerId}] Error: " . $e->getMessage());
+            $this->logger?->error("💥 [Worker #{$workerId}] Error en health check loop: " . $e->getMessage());
+            // Intentar una recuperación de emergencia ante errores críticos
+            try {
+                $this->logger?->warning("🏥 [Worker #{$workerId}] Intentando recuperación de emergencia...");
+                $recovery = $this->retryPermanentFailures($workerId);
+                $this->logger?->info("🏥 [Worker #{$workerId}] Recuperación de emergencia: " .
+                    json_encode($recovery));
+            } catch (\Throwable $recoveryError) {
+                $this->logger?->error("🏥 [Worker #{$workerId}] Error en recuperación de emergencia: " .
+                    $recoveryError->getMessage());
+            }
         } finally {
             $this->logger?->info("✅ [Worker #{$workerId}] HealthCheckLoop FINALIZADO - Total ciclos: {$loopCounter}");
         }
     }
-
     /**
      * Sleep que puede ser interrumpido por señal de stop (versión para Swoole original)
      */
