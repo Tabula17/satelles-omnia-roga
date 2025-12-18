@@ -62,12 +62,12 @@ class HealthManager implements HealthManagerInterface
     {
         // Verificar si es worker principal (no task worker)
         if ($workerId >= $server->setting['worker_num']) {
-            $this->logger?->debug("Worker #{$workerId} es task worker, omitiendo health checks");
+            $this->logger?->debug("🏥 Worker #{$workerId} es task worker, omitiendo health checks");
             return;
         }
 
         if (isset($this->runningWorkers[$workerId])) {
-            $this->logger?->warning("Worker #{$workerId} ya tiene health checks configurados");
+            $this->logger?->warning("🏥 Worker #{$workerId} ya tiene health checks configurados");
             return;
         }
         $this->logger?->info("⚙️ Configurando health checks para worker #{$workerId}");
@@ -109,7 +109,7 @@ class HealthManager implements HealthManagerInterface
             $this->cleanupWorker($workerId);
         });
 
-        $this->logger?->debug("Worker #{$workerId}: Health check coroutine iniciada (CID: {$coroutineId})");
+        $this->logger?->debug("🏥 Worker #{$workerId}: Health check coroutine iniciada (CID: {$coroutineId})");
     }
 
     /**
@@ -117,16 +117,16 @@ class HealthManager implements HealthManagerInterface
      */
     private function runHealthCheckLoop(Server $server, int $workerId, Channel $controlChannel): void
     {
-        $this->logger?->debug("Worker #{$workerId}: Iniciando loop de health checks");
+        $this->logger?->debug("🏥 Worker #{$workerId}: Iniciando loop de health checks");
 
         try {
             while (true) {
                 // 1. Verificar si debemos detenernos
                 if ($this->shouldStop($controlChannel)) {
                     if (!$this->isInCoroutine()) {
-                        $this->logger?->notice("Worker #{$workerId}: Deteniendo loop de health checks. Corutina cerrada");
+                        $this->logger?->notice("🏥 Worker #{$workerId}: Deteniendo loop de health checks. Corutina cerrada");
                     } else {
-                        $this->logger?->debug("Worker #{$workerId}: Señal de stop recibida");
+                        $this->logger?->debug("🏥 Worker #{$workerId}: Señal de stop recibida");
                     }
                     break;
                 }
@@ -136,7 +136,7 @@ class HealthManager implements HealthManagerInterface
                 $result = $this->performHealthChecks($workerId);
                 $checkDuration = microtime(true) - $checkStart;
 
-                $this->logger?->debug("Worker #{$workerId}: Health check completado en {$checkDuration}s");
+                $this->logger?->debug("🏥 Worker #{$workerId}: Health check completado en {$checkDuration}s");
                 // 3. Actualizar estadísticas del worker
                 $this->runningWorkers[$workerId]['last_check'] = time();
                 $this->runningWorkers[$workerId]['cycle_count']++;
@@ -147,13 +147,13 @@ class HealthManager implements HealthManagerInterface
                 if ($result['overall_healthy']) {
                     $this->runningWorkers[$workerId]['consecutive_failures'] = 0;
                     $this->runningWorkers[$workerId]['last_success'] = time();
-                    $this->logger?->debug("Worker #{$workerId}: Health check OK ({$checkDuration}s)");
+                    $this->logger?->debug("🏥 Worker #{$workerId}: Health check OK ({$checkDuration}s)");
                 } else {
                     $this->runningWorkers[$workerId]['consecutive_failures']++;
                     $this->runningWorkers[$workerId]['last_failure'] = time();
 
                     $failures = $this->runningWorkers[$workerId]['consecutive_failures'];
-                    $this->logger?->warning("Worker #{$workerId}: Health check FAILED ({$failures} consecutivos)");
+                    $this->logger?->warning("🏥 Worker #{$workerId}: Health check FAILED ({$failures} consecutivos)");
 
                     // Si hay muchos fallos consecutivos, intentar recuperación
                     if ($failures >= 3) {
@@ -174,12 +174,12 @@ class HealthManager implements HealthManagerInterface
                 // 6. Esperar hasta el próximo check con posibilidad de stop
                 $waitTime = $this->checkInterval / 1000; // ms a segundos
                 if (!$this->sleepWithStopCheck($waitTime, $controlChannel)) {
-                    $this->logger?->debug("Worker #{$workerId}: Sleep interrumpido por stop ");
+                    $this->logger?->debug("🏥 Worker #{$workerId}: Sleep interrumpido por stop ");
                     break;
                 }
             }
         } catch (\Throwable $e) {
-            $this->logger?->error("Worker #{$workerId}: Error en health check loop: " . $e->getMessage());
+            $this->logger?->error("🏥 Worker #{$workerId}: Error en health check loop: " . $e->getMessage());
         } finally {
             $this->logger?->info("Worker #{$workerId}: Loop de health checks finalizado");
         }
@@ -221,14 +221,15 @@ class HealthManager implements HealthManagerInterface
         if ($this->stopping || !$this->isInCoroutine()) {
             return true;
         }
+        $this->logger?->debug("🏥 🏥 Verificando si debemos detener el loop...");
         try {
             // Verificar de forma NO BLOQUEANTE si hay mensaje en el canal
             // pop() con timeout 0 devuelve inmediatamente
             $message = $controlChannel->pop(0);
             return $message === 'stop' || $message === false;
         } catch (\Throwable $e) {
-            $this->logger?->error("Error al verificar si debemos detener el loop: " . $e->getMessage());
-            $this->logger?->debug("Deteniendo health checks..." . var_export($this->getCoroutineInfo(), true));
+            $this->logger?->error("🏥 🏥 Error al verificar si debemos detener el loop: " . $e->getMessage());
+            $this->logger?->debug("🏥 🏥 Deteniendo health checks..." . var_export($this->getCoroutineInfo(), true));
             return true;
         }
     }
@@ -239,7 +240,7 @@ class HealthManager implements HealthManagerInterface
     private function handleConsecutiveFailures(int $workerId): void
     {
         $failures = $this->runningWorkers[$workerId]['consecutive_failures'];
-        $this->logger?->warning("Worker #{$workerId}: {$failures} fallos consecutivos detectados");
+        $this->logger?->warning("🏥 Worker #{$workerId}: {$failures} fallos consecutivos detectados");
 
         // Intentar recuperar conexiones fallidas usando el método del Connector
         try {
@@ -251,7 +252,7 @@ class HealthManager implements HealthManagerInterface
                 $this->runningWorkers[$workerId]['recovery_attempts'] =
                     ($this->runningWorkers[$workerId]['recovery_attempts'] ?? 0) + 1;
             } else {
-                $this->logger?->warning("Worker #{$workerId}: No se pudieron recuperar conexiones");
+                $this->logger?->warning("🏥 Worker #{$workerId}: No se pudieron recuperar conexiones");
             }
 
             // Notificar al canal de control principal
@@ -263,7 +264,7 @@ class HealthManager implements HealthManagerInterface
             ]);
 
         } catch (\Exception $e) {
-            $this->logger?->error("Worker #{$workerId}: Error en recuperación: " . $e->getMessage());
+            $this->logger?->error("🏥 Worker #{$workerId}: Error en recuperación: " . $e->getMessage());
         }
     }
 
@@ -289,11 +290,11 @@ class HealthManager implements HealthManagerInterface
     public function stopHealthCheckCycle(int $timeout = 5): array
     {
         if (!$this->isInCoroutine()) {
-            $this->logger?->warning("No hay coroutines activas, no se puede detener health checks gracefully");
+            $this->logger?->warning("🏥 No hay coroutines activas, no se puede detener health checks gracefully");
             return ['status' => 'out_of_coroutine', 'workers' => count($this->runningWorkers)];
         }
         if ($this->stopping) {
-            $this->logger?->warning("stopGracefully ya fue llamado anteriormente");
+            $this->logger?->warning("🏥 stopGracefully ya fue llamado anteriormente");
             return ['status' => 'already_stopping', 'workers' => count($this->runningWorkers)];
         }
 
@@ -314,14 +315,14 @@ class HealthManager implements HealthManagerInterface
         foreach ($this->workerControlChannels as $workerId => $channel) {
             try {
                 if ($channel->push('stop', 0.1)) {
-                    $this->logger?->debug("Señal 'stop' enviada al worker #{$workerId}");
+                    $this->logger?->debug("🏥 Señal 'stop' enviada al worker #{$workerId}");
                     $results['workers_stopped']++;
                 } else {
-                    $this->logger?->warning("No se pudo enviar señal al worker #{$workerId} (canal lleno/cerrado)");
+                    $this->logger?->warning("🏥 No se pudo enviar señal al worker #{$workerId} (canal lleno/cerrado)");
                     $results['workers_failed']++;
                 }
             } catch (\Exception $e) {
-                $this->logger?->error("Error enviando stop al worker #{$workerId}: " . $e->getMessage());
+                $this->logger?->error("🏥 Error enviando stop al worker #{$workerId}: " . $e->getMessage());
                 $results['workers_failed']++;
             }
         }
@@ -334,7 +335,7 @@ class HealthManager implements HealthManagerInterface
             $elapsed = microtime(true) - $startTime;
 
             if ($elapsed > $maxWaitTime) {
-                $this->logger?->warning("Timeout de {$timeout}s esperando que workers terminen");
+                $this->logger?->warning("🏥 Timeout de {$timeout}s esperando que workers terminen");
                 $results['timeout'] = true;
                 $results['workers_remaining'] = count($this->workerControlChannels);
                 break;
@@ -342,7 +343,7 @@ class HealthManager implements HealthManagerInterface
 
             $remaining = count($this->workerControlChannels);
             if ($remaining > 0) {
-                $this->logger?->debug("Esperando que {$remaining} workers terminen... " .
+                $this->logger?->debug("🏥 Esperando que {$remaining} workers terminen... " .
                     sprintf("(%.1fs/%.1fs)", $elapsed, $maxWaitTime));
                 Coroutine::sleep($pollInterval);
             }
@@ -371,7 +372,7 @@ class HealthManager implements HealthManagerInterface
     public function performHealthChecks(int $workerId = 0, bool $resetFailures = false): array
     {
         if ($resetFailures) {
-            return $this->retryPermanentFailures($workerId);
+            $retry = $this->retryPermanentFailures($workerId);
         }
 
         $results = [
@@ -431,7 +432,7 @@ class HealthManager implements HealthManagerInterface
             }
 
         } catch (\Exception $e) {
-            $this->logger?->error("Worker #{$workerId}: Error en health check: " . $e->getMessage());
+            $this->logger?->error("🏥 Worker #{$workerId}: Error en health check: " . $e->getMessage());
             $results['error'] = $e->getMessage();
             $results['overall_healthy'] = false;
         }
@@ -466,7 +467,7 @@ class HealthManager implements HealthManagerInterface
             return $result;
 
         } catch (\Exception $e) {
-            $this->logger?->error("Worker #{$workerId}: Error en retryPermanentFailures: " . $e->getMessage());
+            $this->logger?->error("🏥 Worker #{$workerId}: Error en retryPermanentFailures: " . $e->getMessage());
             return [
                 'attempted' => 0,
                 'recovered' => 0,
@@ -537,7 +538,7 @@ class HealthManager implements HealthManagerInterface
             $this->runningWorkers[$workerId]['stopped_at'] = time();
         }
 
-        $this->logger?->debug("Worker #{$workerId}: Recursos limpiados");
+        $this->logger?->debug("🏥 Worker #{$workerId}: Recursos limpiados");
     }
 
     /**
@@ -548,9 +549,9 @@ class HealthManager implements HealthManagerInterface
         foreach ($this->workerControlChannels as $workerId => $channel) {
             try {
                 $channel->close();
-                $this->logger?->debug("Canal cerrado para worker #{$workerId}");
+                $this->logger?->debug("🏥 Canal cerrado para worker #{$workerId}");
             } catch (\Exception $e) {
-                $this->logger?->error("Error cerrando canal worker #{$workerId}: " . $e->getMessage());
+                $this->logger?->error("🏥 Error cerrando canal worker #{$workerId}: " . $e->getMessage());
             }
         }
 
@@ -631,7 +632,7 @@ class HealthManager implements HealthManagerInterface
     public function __destruct()
     {
         if (!$this->stopping && !empty($this->workerControlChannels)) {
-            $this->logger?->warning("HealthManager destruido sin stopGracefully(), limpiando canales");
+            $this->logger?->warning("🏥 HealthManager destruido sin stopGracefully(), limpiando canales");
             $this->closeAllChannels();
         }
     }
