@@ -83,11 +83,10 @@ class HealthManager implements HealthManagerInterface
         // Crear canal de control para este worker específico
         $workerControlChannel = new Channel(2);
         $this->workerControlChannels[$workerId] = $workerControlChannel;
-        $coroutineId = -1;
+
         // Iniciar la coroutine de health checks
-        Coroutine::defer(function () use ($server, $workerId, $offset, $workerControlChannel, $coroutineId) {
-            $coroutineId = Coroutine::getCid();
-            $this->workerCoroutineIds[$workerId] = $coroutineId;
+        $coroutineId = Coroutine::create(function () use ($server, $workerId, $offset, $workerControlChannel) {
+            $this->workerCoroutineIds[$workerId] = Coroutine::getCid();
 
             $this->logger?->info("👷 Worker #{$workerId}: Health checks iniciarán en {$offset}s");
 
