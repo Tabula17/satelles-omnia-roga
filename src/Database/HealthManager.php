@@ -220,12 +220,15 @@ class HealthManager implements HealthManagerInterface
     {
         $this->logger?->debug("🏥 🏥 Verificando si debemos detener el loop...");
         if ($this->stopping || !$this->isInCoroutine()) {
+
+            $this->logger?->debug("🏥 🏥 " . __METHOD__ . "() Deteniendo health checks..." . var_export($this->getCoroutineInfo(), true));
             return true;
         }
         try {
             // Verificar de forma NO BLOQUEANTE si hay mensaje en el canal
             // pop() con timeout 0 devuelve inmediatamente
             $message = $controlChannel->pop(0);
+            $this->logger?->debug("🏥 🏥 Verificando si debemos detener el loop..." . var_export($message, true));
             return $message === 'stop' || $message === false;
         } catch (\Throwable $e) {
             $this->logger?->error("🏥 🏥 Error al verificar si debemos detener el loop: " . $e->getMessage());
