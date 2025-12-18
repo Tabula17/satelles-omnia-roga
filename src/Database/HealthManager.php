@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Tabula17\Satelles\Omnia\Roga\Database;
 
+use Closure;
 use Psr\Log\LoggerInterface;
 use Swoole\Coroutine;
 use Swoole\Coroutine\Channel;
@@ -38,6 +39,8 @@ class HealthManager implements HealthManagerInterface
     private array $healthStats = [];
     private array $checkHistory = [];
     private const int MAX_HISTORY = 100;
+
+    protected(set) ?Closure $notifier;
 
     public function __construct(
         Connector                         $connector,
@@ -157,16 +160,17 @@ class HealthManager implements HealthManagerInterface
                         $this->handleConsecutiveFailures($workerId);
                     }
                 }
-
+                $lastCheck = $this->checkHistory[array_key_last($this->checkHistory)] ?? [];
                 // 5. Guardar en historial
                 $this->addToHistory([
                     'worker_id' => $workerId,
                     'timestamp' => time(),
                     'duration' => $checkDuration,
                     'healthy' => $result['overall_healthy'],
+                    'health_status' => $result['health_status'] ?? [],
                     'stats' => $result['pool_stats'] ?? []
                 ]);
-
+                $this->notifyIfChanges($lastCheck, $result);
                 // 6. Esperar hasta el próximo check con posibilidad de stop
                 $waitTime = $this->checkInterval / 1000; // ms a segundos
                 if (!$this->sleepWithStopCheck($waitTime, $controlChannel)) {
@@ -473,6 +477,14 @@ class HealthManager implements HealthManagerInterface
     }
 
     /**
+     * @inheritDoc
+     */
+    public function registerNotifier(callable $notifier): void
+    {
+        $this->notifier = $notifier;
+    }
+
+    /**
      * Calcula offset escalonado para workers
      */
     private function calculateWorkerOffset(int $workerId, int $totalWorkers): float
@@ -623,4 +635,40 @@ class HealthManager implements HealthManagerInterface
             $this->closeAllChannels();
         }
     }
+
+    private function notifyIfChanges(mixed $lastCheck, array $result)
+    {
+        if (!$this->notifier || empty($result) || empty($lastCheck)) {
+            return;
+        }
+        if ($lastCheck['health_status']['timestamp']) {
+            $lastCheckTimestamp = $lastCheck['health_status']['timestamp'];
+            unset($lastCheck['health_status']['timestamp']);
+        }
+        if ($result['health_status']['timestamp']) {
+            $resultTimestamp = $result['health_status']['timestamp'];
+            unset($result['health_status']['timestamp']);
+        }
+        $notif = $this->notifier;
+        if ($lastCheck['healthy'] !== $result['healthy'] || $lastCheck['health_status'] !== $result['health_status']) {
+
+            /**
+             * health_status:
+             *  active_pools: 5
+             *  loaded_connections: 5
+             *  permanent_failures: 0
+             *  pool_groups: ['sqldev', 'sqlsj', 'sqlpch', 'sqltuc', 'sigmydevsj']
+             *  unreachable_connections: 1
+             */
+            if ($result['health_status']['active_pools'] > $lastCheck['health_status']['active_pools']) {
+                $notif([
+                    'type' => 'pool_recovered',
+                    'data' => $result['health_status'],
+                    'lastChecked' => $lastCheckTimestamp ?? null,
+                    'currentChecked' => $resultTimestamp ?? time()
+                ]);
+            }
+        }
+    }
+
 }
