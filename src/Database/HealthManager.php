@@ -8,6 +8,7 @@ use Swoole\Coroutine;
 use Swoole\Coroutine\Channel;
 use Swoole\Server;
 use Tabula17\Satelles\Utilis\Connectable\HealthManagerInterface;
+use Tabula17\Satelles\Utilis\Trait\CoroutineHelper;
 
 /**
  * Class HealthManager
@@ -19,6 +20,8 @@ use Tabula17\Satelles\Utilis\Connectable\HealthManagerInterface;
  */
 class HealthManager implements HealthManagerInterface
 {
+    use CoroutineHelper;
+
     private Connector $connector;
     private int $checkInterval;
 
@@ -276,6 +279,10 @@ class HealthManager implements HealthManagerInterface
      */
     public function stopHealthCheckCycle(int $timeout = 5): array
     {
+        if (!$this->isInCoroutine()) {
+            $this->logger?->warning("No hay coroutines activas, no se puede detener health checks gracefully");
+            return ['status' => 'out_of_coroutine', 'workers' => count($this->runningWorkers)];
+        }
         if ($this->stopping) {
             $this->logger?->warning("stopGracefully ya fue llamado anteriormente");
             return ['status' => 'already_stopping', 'workers' => count($this->runningWorkers)];
