@@ -7,10 +7,7 @@ use Psr\Log\LoggerInterface;
 use Swoole\Coroutine;
 use Swoole\Coroutine\Channel;
 use Swoole\Server;
-use Tabula17\Satelles\Utilis\Exception\InvalidArgumentException;
-use Tabula17\Satelles\Utilis\Trait\CoroutineHelper;
-use Throwable;
-use Swoole\Timer;
+use Tabula17\Satelles\Utilis\Connectable\HealthManagerInterface;
 
 /**
  * Class HealthManager
@@ -20,7 +17,7 @@ use Swoole\Timer;
  * such as database and memory health inspections. The class also handles graceful stopping of health checks
  * to ensure a clean shutdown process.
  */
-class HealthManager
+class HealthManager implements HealthManagerInterface
 {
     private Connector $connector;
     private int $checkInterval;
@@ -37,7 +34,7 @@ class HealthManager
     // Estadísticas
     private array $healthStats = [];
     private array $checkHistory = [];
-    private const MAX_HISTORY = 100;
+    private const int MAX_HISTORY = 100;
 
     public function __construct(
         Connector                         $connector,
@@ -53,26 +50,6 @@ class HealthManager
     }
 
     /**
-     * Configura el health check en el servidor
-     */
-    public function setupServerTick(Server $server, int $workerId): void
-    {
-        // Solo workers principales (no task workers)
-        if ($workerId >= $server->setting['worker_num']) {
-            $this->logger?->debug("Worker #{$workerId} es task worker, omitiendo health checks");
-            return;
-        }
-
-        if (isset($this->runningWorkers[$workerId])) {
-            $this->logger?->warning("Worker #{$workerId} ya tiene health checks configurados");
-            return;
-        }
-
-        $this->logger?->info("⚙️ Configurando health checks para worker #{$workerId}");
-        $this->startHealthCheckCycle($server, $workerId);
-    }
-
-    /**
      * Inicia el ciclo de health checks para un worker
      */
     public function startHealthCheckCycle(Server $server, int $workerId): void
@@ -82,6 +59,12 @@ class HealthManager
             $this->logger?->debug("Worker #{$workerId} es task worker, omitiendo health checks");
             return;
         }
+
+        if (isset($this->runningWorkers[$workerId])) {
+            $this->logger?->warning("Worker #{$workerId} ya tiene health checks configurados");
+            return;
+        }
+        $this->logger?->info("⚙️ Configurando health checks para worker #{$workerId}");
         // Registrar worker
         $this->runningWorkers[$workerId] = [
             'started_at' => microtime(true),
@@ -168,7 +151,7 @@ class HealthManager
 
                     // Si hay muchos fallos consecutivos, intentar recuperación
                     if ($failures >= 3) {
-                        $this->handleConsecutiveFailures($workerId, $result);
+                        $this->handleConsecutiveFailures($workerId);
                     }
                 }
 
@@ -197,7 +180,7 @@ class HealthManager
     /**
      * Sleep que puede ser interrumpido por señal de stop (versión para Swoole original)
      */
-    private function sleepWithStopCheck(float $seconds, \Swoole\Coroutine\Channel $controlChannel): bool
+    private function sleepWithStopCheck(float $seconds, Channel $controlChannel): bool
     {
         $endTime = microtime(true) + $seconds;
 
@@ -225,7 +208,7 @@ class HealthManager
     /**
      * Verifica si debemos detener el loop (versión para Swoole original)
      */
-    private function shouldStop(\Swoole\Coroutine\Channel $controlChannel): bool
+    private function shouldStop(Channel $controlChannel): bool
     {
         if ($this->stopping) {
             return true;
@@ -235,17 +218,13 @@ class HealthManager
         // pop() con timeout 0 devuelve inmediatamente
         $message = $controlChannel->pop(0);
 
-        if ($message === 'stop' || $message === false) {
-            return true; // Señal de stop recibida o canal cerrado
-        }
-
-        return false;
+        return $message === 'stop' || $message === false;
     }
 
     /**
      * Maneja fallos consecutivos
      */
-    private function handleConsecutiveFailures(int $workerId, array $checkResult): void
+    private function handleConsecutiveFailures(int $workerId): void
     {
         $failures = $this->runningWorkers[$workerId]['consecutive_failures'];
         $this->logger?->warning("Worker #{$workerId}: {$failures} fallos consecutivos detectados");
@@ -295,7 +274,7 @@ class HealthManager
     /**
      * Detiene todos los health checks gracefulmente
      */
-    public function stopGracefully(int $timeout = 5): array
+    public function stopHealthCheckCycle(int $timeout = 5): array
     {
         if ($this->stopping) {
             $this->logger?->warning("stopGracefully ya fue llamado anteriormente");
@@ -373,8 +352,12 @@ class HealthManager
     /**
      * Ejecuta los health checks
      */
-    public function performHealthChecks(int $workerId = 0): array
+    public function performHealthChecks(int $workerId = 0, bool $resetFailures = false): array
     {
+        if ($resetFailures) {
+            return $this->retryPermanentFailures($workerId);
+        }
+
         $results = [
             'worker_id' => $workerId,
             'timestamp' => time(),
@@ -443,7 +426,7 @@ class HealthManager
     /**
      * Retry de fallos permanentes usando el Connector
      */
-    public function retryPermanentFailures(int $workerId = 0): array
+    private function retryPermanentFailures(int $workerId = 0): array
     {
         $this->logger?->info("Worker #{$workerId}: Intentando recuperar conexiones fallidas");
 
