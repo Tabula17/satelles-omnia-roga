@@ -159,23 +159,32 @@ class HealthManager implements HealthManagerInterface
 
         while (microtime(true) < $endTime && !$this->stopping) {
             $remaining = $endTime - microtime(true);
-            $chunkTime = min(0.5, max(0.001, $remaining)); // Bloques de max 0.5s
+            $chunkTime = min(0.5, max(0.001, $remaining));
 
-            // Intentar leer del canal de control con un timeout corto
-            // Si llega el mensaje 'stop', salir inmediatamente
-            $message = $controlChannel->pop($chunkTime);
+            // VERIFICAR PRIMERO SI HAY MENSAJE SIN BLOQUEAR
+            $stats = $controlChannel->stats();
 
-            if ($message === 'stop' || $message === false) {
-                return false; // Señal de stop recibida o canal cerrado
+            if ($stats['queue_num'] > 0) {
+                // Hay mensaje en el canal, leerlo
+                $message = $controlChannel->pop(0.001);
+                if ($message === 'stop' || $message === false) {
+                    $this->logger?->debug("🏥 Recibido 'stop' durante sleep");
+                    return false;
+                }
             }
 
-            // Verificar flag stopping
+            // Si no hay mensaje, dormir en chunks pequeños
+            // Pero usar sleep normal en lugar de pop() bloqueante
+            Coroutine::sleep(min(0.1, $chunkTime));
+
+            // Verificar flag stopping periódicamente
             if ($this->stopping) {
+                $this->logger?->debug("🏥 Flag stopping activado durante sleep");
                 return false;
             }
         }
 
-        return true; // Sleep completado normalmente
+        return true;
     }
 
     /**
@@ -307,79 +316,64 @@ class HealthManager implements HealthManagerInterface
      */
     public function stopHealthCheckCycle(int $timeout = 5): array
     {
-        if (!$this->isInCoroutine()) {
-            $this->logger?->warning("🏥 No hay coroutines activas, no se puede detener health checks gracefully");
-            return ['status' => 'out_of_coroutine', 'workers' => count($this->runningWorkers)];
-        }
         if ($this->stopping) {
-            $this->logger?->warning("🏥 stopGracefully ya fue llamado anteriormente");
-            return ['status' => 'already_stopping', 'workers' => count($this->runningWorkers)];
+            return ['status' => 'already_stopping'];
         }
 
+        $this->logger?->info("🛑 Deteniendo health checks...");
         $this->stopping = true;
-        $this->logger?->info("🛑 Iniciando stop graceful de health checks...");
 
-        $results = [
-            'total_workers' => count($this->workerControlChannels),
-            'workers_stopped' => 0,
-            'workers_failed' => 0,
-            'timeout' => false,
-            'timestamp' => time()
-        ];
-
+        $results = [];
         $startTime = microtime(true);
 
-        // 1. Enviar señal de stop a todos los workers
         foreach ($this->workerControlChannels as $workerId => $channel) {
             try {
-                if ($channel->push('stop', 0.1)) {
-                    $this->logger?->debug("🏥 Señal 'stop' enviada al worker #{$workerId}");
-                    $results['workers_stopped']++;
-                } else {
-                    $this->logger?->warning("🏥 No se pudo enviar señal al worker #{$workerId} (canal lleno/cerrado)");
-                    $results['workers_failed']++;
+                // Intentar múltiples veces el push
+                $maxAttempts = 3;
+                $pushSuccess = false;
+
+                for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+                    if ($channel->push('stop', 0.05)) { // Timeout más corto
+                        $pushSuccess = true;
+                        $results[$workerId] = 'stop_sent';
+                        $this->logger?->debug("✅ Señal stop enviada a worker #{$workerId} (intento {$attempt})");
+                        break;
+                    }
+
+                    $this->logger?->debug("⏳ Intento {$attempt} fallado para worker #{$workerId}, reintentando...");
+                    Coroutine::sleep(0.01); // Pequeña pausa entre intentos
                 }
+
+                if (!$pushSuccess) {
+                    $this->logger?->warning("❌ No se pudo enviar stop a worker #{$workerId} después de {$maxAttempts} intentos");
+                    $results[$workerId] = 'failed';
+                }
+
             } catch (\Exception $e) {
-                $this->logger?->error("🏥 Error enviando stop al worker #{$workerId}: " . $e->getMessage());
-                $results['workers_failed']++;
+                $this->logger?->error("💥 Error con worker #{$workerId}: " . $e->getMessage());
+                $results[$workerId] = 'error';
             }
         }
 
-        // 2. Esperar que todos los workers terminen
-        $maxWaitTime = $timeout;
-        $pollInterval = 0.1; // 100ms
-
-        while (count($this->workerControlChannels) > 0) {
+        // Esperar que terminen (con timeout)
+        $elapsed = 0;
+        while (!empty($this->workerControlChannels) && $elapsed < $timeout) {
             $elapsed = microtime(true) - $startTime;
+            $remainingWorkers = count($this->workerControlChannels);
 
-            if ($elapsed > $maxWaitTime) {
-                $this->logger?->warning("🏥 Timeout de {$timeout}s esperando que workers terminen");
-                $results['timeout'] = true;
-                $results['workers_remaining'] = count($this->workerControlChannels);
-                break;
-            }
-
-            $remaining = count($this->workerControlChannels);
-            if ($remaining > 0) {
-                $this->logger?->debug("🏥 Esperando que {$remaining} workers terminen... " .
-                    sprintf("(%.1fs/%.1fs)", $elapsed, $maxWaitTime));
-                Coroutine::sleep($pollInterval);
+            if ($remainingWorkers > 0) {
+                $this->logger?->debug("⏳ Esperando que {$remainingWorkers} workers terminen... ({$elapsed}s)");
+                Coroutine::sleep(0.1);
             }
         }
 
-        // 3. Cerrar todos los canales
-        $this->closeAllChannels();
+        if (!empty($this->workerControlChannels)) {
+            $this->logger?->warning("⏰ Timeout después de {$timeout}s, forzando cierre");
+            $this->closeAllChannels();
+        }
 
         $totalTime = microtime(true) - $startTime;
-        $this->logger?->info(sprintf(
-            "✅ Health checks detenidos. Tiempo total: %.2fs. Workers: %d/%d",
-            $totalTime,
-            $results['workers_stopped'],
-            $results['total_workers']
-        ));
-
-        $results['execution_time'] = $totalTime;
-        $results['stopping'] = $this->stopping;
+        $this->logger?->info(sprintf("✅ Health checks detenidos en %.2fs", $totalTime));
 
         return $results;
     }
