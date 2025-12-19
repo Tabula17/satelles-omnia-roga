@@ -163,18 +163,19 @@ class HealthManager implements HealthManagerInterface
 
                 // Guardar en historial
                 $lastCheck = $this->checkHistory[array_key_last($this->checkHistory)] ?? [];
-                $this->addToHistory([
+                $newCheck = [
                     'worker_id' => $workerId,
                     'timestamp' => time(),
                     'duration' => $checkDuration,
                     'healthy' => $result['overall_healthy'],
                     'health_status' => $result['health_status'] ?? [],
                     'stats' => $result['pool_stats'] ?? []
-                ]);
+                ];
+                $this->addToHistory($newCheck);
 
                 // Notificar cambios si hay notificador configurado
                 if (isset($this->notifier)) {
-                    $this->notifyIfChanges($lastCheck, $result);
+                    $this->notifyIfChanges($lastCheck, $newCheck);
                 }
 
                 $this->logger?->debug("🏥 [Worker #{$workerId}] Esperando {$this->checkInterval}ms...");
@@ -713,6 +714,7 @@ class HealthManager implements HealthManagerInterface
             unset($result['health_status']['timestamp']);
         }
         $notif = $this->notifier;
+        // REVISAR, son diferentes los arrays!
         if ($lastCheck['overall_healthy'] !== $result['overall_healthy'] || $lastCheck['health_status'] !== $result['health_status']) {
 
             /**
