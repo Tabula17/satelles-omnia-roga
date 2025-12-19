@@ -716,7 +716,7 @@ class HealthManager implements HealthManagerInterface
         }
         $notif = $this->notifier;
         // REVISAR, son diferentes los arrays!
-        if ($lastCheck['overall_healthy'] !== $result['overall_healthy'] || $lastCheck['health_status'] !== $result['health_status']) {
+        if ($lastCheck['healthy'] !== $result['healthy'] || $lastCheck['health_status'] !== $result['health_status']) {
 
             /**
              * health_status:
