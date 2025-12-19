@@ -226,7 +226,8 @@ class HealthManager implements HealthManagerInterface
 
             // Si no hay mensaje, dormir en chunks pequeños
             // Pero usar sleep normal en lugar de pop() bloqueante
-            Coroutine::sleep(min(0.1, $chunkTime));
+            //Coroutine::sleep(min(0.1, $chunkTime));
+            $this->safeSleep(min(0.1, $chunkTime));
 
             // Verificar flag stopping periódicamente
             if ($this->stopping) {
@@ -392,7 +393,7 @@ class HealthManager implements HealthManagerInterface
                     }
 
                     $this->logger?->debug("⏳ Intento {$attempt} fallado para worker #{$workerId}, reintentando...");
-                    Coroutine::sleep(0.01); // Pequeña pausa entre intentos
+                    $this->safeSleep(0.1);
                 }
 
                 if (!$pushSuccess) {
@@ -414,7 +415,7 @@ class HealthManager implements HealthManagerInterface
 
             if ($remainingWorkers > 0) {
                 $this->logger?->debug("⏳ Esperando que {$remainingWorkers} workers terminen... ({$elapsed}s)");
-                Coroutine::sleep(0.1);
+                $this->safeSleep(0.1);
             }
         }
 
