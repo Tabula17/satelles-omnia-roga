@@ -81,9 +81,9 @@ class HealthManager implements HealthManagerInterface
             'status' => 'starting',
             'failures' => 0,
             'unreachable' => 0,
-            'last_unreachable_check' => 0,
+           // 'last_unreachable_check' => 0,
             'permanent' => 0,
-            'last_permanent_check' => 0,
+            'last_permanent_check' => time(),
         ];
 
         // Calcular offset escalonado
@@ -147,7 +147,7 @@ class HealthManager implements HealthManagerInterface
                 $retryUnreachable = false;
                 $resetFailures = false;
                 if (!empty($lastCheck) && $lastCheck['overall_healthy'] === false) {
-                    $lastChecked = date('Y-m-d H:i:s', min($lastCheck['timestamp'], $this->runningWorkers[$workerId]['last_unreachable_check'], $this->runningWorkers[$workerId]['last_permanent_check']));
+                    $lastChecked = date('Y-m-d H:i:s', min($lastCheck['timestamp'], $this->runningWorkers[$workerId]['last_permanent_check']));
                     $this->logger?->info("🏥 [Worker #{$workerId}] Comprobando si hay conexiones que puedan recuperarse, chequeo anterior: {$lastChecked}...");
 
                     $resetFailures = $lastCheck['permanent_failures'] > 0 && (time() - 1500) > $this->runningWorkers[$workerId]['last_permanent_check'];
