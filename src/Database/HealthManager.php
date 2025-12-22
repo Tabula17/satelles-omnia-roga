@@ -142,7 +142,7 @@ class HealthManager implements HealthManagerInterface
                 $this->runningWorkers[$workerId]['last_duration'] = $checkDuration;
                 $this->runningWorkers[$workerId]['last_result'] = $result['overall_healthy'];
 
-                // Manejar fallos consecutivos (PARTE CRUCIAL QUE FALTABA)
+                // Manejar fallos consecutivos
                 if ($result['overall_healthy']) {
                     $this->runningWorkers[$workerId]['consecutive_failures'] = 0;
                     $this->runningWorkers[$workerId]['last_success'] = time();

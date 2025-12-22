@@ -595,15 +595,20 @@ class Connector
 
     private function getSinglePoolStats(string $name): array
     {
+        /**
+         * @var PDOPoolExtended $pool
+         */
         $pool = $this->pools[$name] ?? null;
         if (!$pool) {
             return ['error' => 'Pool not found'];
         }
+
         $out = [
             'available' => $pool->available(),
             'capacity' => $pool->getSize(),
             'utilization' => (($pool->getSize() - $pool->available()) / $pool->getSize()) * 100,
-            'used_connections' => count(array_filter($this->usedConnections, static fn($pn) => $pn === $name))
+            'used_connections' => count(array_filter($this->usedConnections, static fn($pn) => $pn === $name)),
+            'stats' => $pool->stats()
         ];
         if ($pool instanceof PDOPoolExtended) {
             $out = array_merge($out, [
