@@ -627,9 +627,10 @@ class HealthManager implements HealthManagerInterface
     {
         $activeWorkers = array_filter(
             $this->runningWorkers,
-            fn($worker) => ($worker['status'] ?? '') === 'running'
+            static fn($worker) => ($worker['status'] ?? '') === 'running'
         );
-
+        $hist = $this->storage ? $this->storage->get() : $this->checkHistory;
+        //return array_slice($this->storage?$this->storage->get():$this->checkHistory, -$limit);
         return [
             'running_workers' => count($activeWorkers),
             'total_workers' => count($this->runningWorkers),
@@ -637,8 +638,8 @@ class HealthManager implements HealthManagerInterface
             'active_coroutines' => count($this->workerCoroutineIds),
             'active_channels' => count($this->workerControlChannels),
             'check_interval_ms' => $this->checkInterval,
-            'check_history_count' => count($this->checkHistory),
-            'last_check' => end($this->checkHistory) ?: null,
+            'check_history_count' => count($hist),
+            'last_check' => end($hist) ?: null,
             'timestamp' => time()
         ];
     }
@@ -677,7 +678,7 @@ class HealthManager implements HealthManagerInterface
      */
     public function getCheckHistory(int $limit = 20): array
     {
-        return array_slice($this->checkHistory, -$limit);
+        return array_slice($this->storage ? $this->storage->get() : $this->checkHistory, -$limit);
     }
 
     /**
