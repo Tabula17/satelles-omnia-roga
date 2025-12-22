@@ -142,16 +142,49 @@ class Connector
         }
     }
 
-    /**
-     * @throws InvalidArgumentException
-     */
-    public function reloadUnreachableConnections(int $maxRetries = 3): array
+    public function fetchUnreachableConnections(): DbConfigCollection
     {
         $connections = clone $this->unreachableConnections;
         // LIMPIA ANTES de reintentar (evita bucle infinito)
         $this->unreachableConnections->clear();
-        return $this->reloadConnections($connections, $maxRetries);
+        return $connections;
     }
+    public function resetUnreachableConnections(): void
+    {
+        $connections = $this->fetchUnreachableConnections();
+        foreach ($connections as $config) {
+            $this->loadedConnections->addIfNotExist($config);
+        }
+    }
+    private function reloadUnreachableConnections(int $maxRetries = 3): void
+    {
+        $try = 0;
+        while ($try++ < $maxRetries) {
+            $this->logger?->debug("Attempting to reload unreachable connections (try #$try)");
+            $this->reloadConnections($this->fetchUnreachableConnections(), $maxRetries);
+        }
+
+    }
+
+    public function fetchPermanentlyFailedConnections(): DbConfigCollection
+    {
+        $connections = clone $this->permanentlyFailedConnections;
+        $this->permanentlyFailedConnections->clear();
+        foreach ($connections as $config) {
+            $config->unsetMetadataProperty('retry_count');
+            $config->unsetMetadataProperty('last_retry_at');
+        }
+        return $connections;
+    }
+
+    /**
+     * @throws InvalidArgumentException
+     */
+    public function retryFailedConnections(int $maxRetries = 3): array
+    {
+        return $this->reloadConnections($this->fetchUnreachableConnections(), $maxRetries);
+    }
+
 
     /**
      * @throws InvalidArgumentException
@@ -167,7 +200,7 @@ class Connector
         }
 
 
-        $this->logger?->info("♻︎ Reloading {$originalCount} connections (max {$maxRetries} retries)");
+        $this->logger?->info("︎🔂 Reloading {$originalCount} connections (max {$maxRetries} retries)");
 
         $results = ['success' => 0, 'failed' => 0];
         /* @var DbConfig $config */
@@ -221,21 +254,7 @@ class Connector
         return $results;
     }
 
-    /**
-     * @throws InvalidArgumentException
-     */
-    public function retryFailedConnections(int $maxRetries = 3): array
-    {
-        $connections = clone $this->permanentlyFailedConnections;
-        $this->permanentlyFailedConnections->clear();
-        foreach ($connections as $config) {
-            $config->unsetMetadataProperty('retry_count');
-            $config->unsetMetadataProperty('last_retry_at');
-        }
-        return $this->reloadConnections($connections, $maxRetries);
-    }
-
-    public function healthCheckLoadedConnections(): void
+    public function healthCheckLoadedConnections(int $maxRetries = 3): void
     {
         foreach ($this->loadedConnections as $config) {
             if (!$config->canConnect()) {
@@ -248,6 +267,7 @@ class Connector
                 $this->removePool($config->name);
             }
         }
+        $this->reloadUnreachableConnections($maxRetries);
     }
 
     public function getPermanentlyFailedConnections(): DbConfigCollection
@@ -284,55 +304,55 @@ class Connector
     /**
      * Realiza health check de todas las conexiones cargadas
      * @return array Estadísticas del health check
-    public function performHealthCheck(): array
-    {
-        $startTime = microtime(true);
-        $initialCount = $this->loadedConnections->count();
-        $initialPoolsUp = array_keys($this->poolCount);
-
-        // También intentar reconectar las inalcanzables periódicamente
-        if (time() % 300 === 0) { // Cada 5 minutos
-            try {
-                $this->reloadUnreachableConnections();
-            } catch (Throwable $e) {
-                $this->logger?->error("Error reloading unreachable connections: " . $e->getMessage());
-            }
-        }
-        $this->healthCheckLoadedConnections();
-        $this->logger?->debug("Health check finished in " . round((microtime(true) - $startTime) * 1000, 2) . "ms");
-
-        $online = $this->loadedConnections->count();
-        $unreachable = $this->unreachableConnections->count();
-        $permanentFailures = $this->permanentlyFailedConnections->count();
-        $totalConnections = $initialCount + $unreachable + $permanentFailures;
-        $failed = $unreachable + $permanentFailures;
-        $healthy = $totalConnections - $failed;
-        $poolsNow = array_keys($this->poolCount);
-        $poolsUp = array_diff($poolsNow, $initialPoolsUp);
-        $poolsDown = array_diff($initialPoolsUp, $poolsNow);
-        $changed = count($poolsUp) + count($poolsDown);
-
-
-        return [
-            'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
-            'loaded_connections' => $online,
-            'unreachable_connections' => $unreachable,
-            'permanent_failures' => $permanentFailures,
-            'status_change' => abs($changed),
-            'status_change_percentage' => round(($changed / $totalConnections) * 100, 2),
-            'healthy' => $healthy,
-            'failed' => $failed,
-            'overall_healthy' => $healthy === $totalConnections,
-            'healthy_percentage' => round(($healthy / $totalConnections) * 100, 2),
-            'active_pools' => $this->pools->count(),
-            'pools_online' => $poolsNow,
-            'pools_up' => $poolsUp,
-            'pools_down' => $poolsDown,
-            'pools_unchanged' => count($initialPoolsUp) - count($poolsUp) - count($poolsDown),
-            'timestamp' => time()
-        ];
-    }
-*/
+     * public function performHealthCheck(): array
+     * {
+     * $startTime = microtime(true);
+     * $initialCount = $this->loadedConnections->count();
+     * $initialPoolsUp = array_keys($this->poolCount);
+     *
+     * // También intentar reconectar las inalcanzables periódicamente
+     * if (time() % 300 === 0) { // Cada 5 minutos
+     * try {
+     * $this->reloadUnreachableConnections();
+     * } catch (Throwable $e) {
+     * $this->logger?->error("Error reloading unreachable connections: " . $e->getMessage());
+     * }
+     * }
+     * $this->healthCheckLoadedConnections();
+     * $this->logger?->debug("Health check finished in " . round((microtime(true) - $startTime) * 1000, 2) . "ms");
+     *
+     * $online = $this->loadedConnections->count();
+     * $unreachable = $this->unreachableConnections->count();
+     * $permanentFailures = $this->permanentlyFailedConnections->count();
+     * $totalConnections = $initialCount + $unreachable + $permanentFailures;
+     * $failed = $unreachable + $permanentFailures;
+     * $healthy = $totalConnections - $failed;
+     * $poolsNow = array_keys($this->poolCount);
+     * $poolsUp = array_diff($poolsNow, $initialPoolsUp);
+     * $poolsDown = array_diff($initialPoolsUp, $poolsNow);
+     * $changed = count($poolsUp) + count($poolsDown);
+     *
+     *
+     * return [
+     * 'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+     * 'loaded_connections' => $online,
+     * 'unreachable_connections' => $unreachable,
+     * 'permanent_failures' => $permanentFailures,
+     * 'status_change' => abs($changed),
+     * 'status_change_percentage' => round(($changed / $totalConnections) * 100, 2),
+     * 'healthy' => $healthy,
+     * 'failed' => $failed,
+     * 'overall_healthy' => $healthy === $totalConnections,
+     * 'healthy_percentage' => round(($healthy / $totalConnections) * 100, 2),
+     * 'active_pools' => $this->pools->count(),
+     * 'pools_online' => $poolsNow,
+     * 'pools_up' => $poolsUp,
+     * 'pools_down' => $poolsDown,
+     * 'pools_unchanged' => count($initialPoolsUp) - count($poolsUp) - count($poolsDown),
+     * 'timestamp' => time()
+     * ];
+     * }
+     */
 
     /**
      * @return array Estado general del connector
