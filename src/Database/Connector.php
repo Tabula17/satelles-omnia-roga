@@ -189,7 +189,7 @@ class Connector
      */
     public function retryFailedConnections(int $maxRetries = 3): array
     {
-        return $this->reloadConnections($this->fetchUnreachableConnections(), $maxRetries);
+        return $this->reloadConnections($this->fetchPermanentlyFailedConnections(), $maxRetries);
     }
 
     /**
