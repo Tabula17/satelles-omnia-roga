@@ -564,7 +564,7 @@ class HealthManager implements HealthManagerInterface
         // Mantener tamaño limitado
         if (count($this->checkHistory) > self::MAX_HISTORY) {
             array_shift($this->checkHistory);
-            $this?->storage->pop();
+            $this?->storage->trim(-1, -20);
         }
     }
 
