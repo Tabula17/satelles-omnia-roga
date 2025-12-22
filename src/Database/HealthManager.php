@@ -80,7 +80,9 @@ class HealthManager implements HealthManagerInterface
             'status' => 'starting',
             'failures' => 0,
             'unreachable' => 0,
+            'last_unreachable_check' => 0,
             'permanent' => 0,
+            'last_permanent_check' => 0,
         ];
 
         // Calcular offset escalonado
@@ -142,11 +144,11 @@ class HealthManager implements HealthManagerInterface
                     $lastChecked = date('Y-m-d H:i:s', $lastCheck['timestamp']);
                     $this->logger?->info("🏥 [Worker #{$workerId}] Comprobando si hay conexiones que puedan recuperarse, chequeo anterior: {$lastChecked}...");
 
-                    $retryUnreachable = $lastCheck['unreachable_connections'] > 0 && (time() - 420) > $lastCheck['timestamp'];
+                    $retryUnreachable = (time() - 420) > $this->runningWorkers[$workerId]['last_unreachable_check'];
                     if ($retryUnreachable) {
                         $this->logger?->debug("🏥 [Worker #{$workerId}] Vamos a tratar de recuperar {$lastCheck['unreachable_connections']} conexiones...");
                     }
-                    $resetFailures = $lastCheck['permanent_failures'] > 0 && (time() - 1500) > $lastCheck['timestamp'];
+                    $resetFailures = (time() - 1500) > $this->runningWorkers[$workerId]['last_permanent_check'];
                     if ($resetFailures) {
                         $this->logger?->debug("🏥 [Worker #{$workerId}] Vamos a intentar recuperar {$lastCheck['permanent_failures']} fallos permanentes...");
                     }
@@ -154,6 +156,7 @@ class HealthManager implements HealthManagerInterface
 
                 $this->logger?->debug("🏥 [Worker #{$workerId}] Ejecutando health check...");
                 $result = $this->performHealthChecks($workerId, $retryUnreachable, $resetFailures);
+                $this->runningWorkers[$workerId]['cycle_count']++;
 
                 if (isset($this->notifier) && $result['status_change'] > 0) {
                     $this->notifyControlChannel('recovery_attempt', [
@@ -305,39 +308,6 @@ class HealthManager implements HealthManagerInterface
         return -1; // No encontrado
     }
 
-    /**
-     * Maneja fallos consecutivos
-     */
-    private function handleConsecutiveFailures(int $workerId): void
-    {
-        $failures = $this->runningWorkers[$workerId]['failures'];
-        $this->logger?->warning("🏥 Worker #{$workerId}: {$failures} fallos consecutivos detectados");
-
-        // Intentar recuperar conexiones fallidas usando el método del Connector
-        try {
-            $recoveryResult = $this->connector->retryFailedConnections();
-
-            if ($recoveryResult['recovered'] > 0) {
-                $this->logger?->info("Worker #{$workerId}: Recuperadas {$recoveryResult['recovered']} conexiones");
-                $this->runningWorkers[$workerId]['failures'] = 0;
-                $this->runningWorkers[$workerId]['recovery_attempts'] =
-                    ($this->runningWorkers[$workerId]['recovery_attempts'] ?? 0) + 1;
-            } else {
-                $this->logger?->warning("🏥 Worker #{$workerId}: No se pudieron recuperar conexiones");
-            }
-
-            // Notificar al canal de control principal
-            $this->notifyControlChannel('recovery_attempt', [
-                'worker_id' => $workerId,
-                'recovery_result' => $recoveryResult,
-                'failures' => $failures,
-                'timestamp' => time()
-            ]);
-
-        } catch (\Exception $e) {
-            $this->logger?->error("🏥 Worker #{$workerId}: Error en recuperación: " . $e->getMessage());
-        }
-    }
 
     /**
      * Notifica al canal de control principal
@@ -461,7 +431,8 @@ class HealthManager implements HealthManagerInterface
             $initialPoolsUp = $this->connector->getPoolGroupNames();
             if ($resetFailures === true) {
                 try {
-                    $this->connector->retryFailedConnections(1);
+                    $this->runningWorkers[$workerId]['last_permanent_check'] = time();
+                    $this->connector->retryFailedConnections();
                 } catch (Throwable $e) {
                     $this->logger?->error("Error reloading permanent failed connections: " . $e->getMessage());
                 }
@@ -469,6 +440,7 @@ class HealthManager implements HealthManagerInterface
             // También intentar reconectar las inalcanzables periódicamente
             if ($retryUnreachable) {
                 try {
+                    $this->runningWorkers[$workerId]['last_unreachable_check'] = time();
                     $this->connector->reloadUnreachableConnections();
                 } catch (Throwable $e) {
                     $this->logger?->error("Error reloading unreachable connections: " . $e->getMessage());
