@@ -267,7 +267,9 @@ class Connector
                 $this->removePool($config->name);
             }
         }
-        $this->reloadUnreachableConnections($maxRetries);
+        if($this->unreachableConnections->count() > 0) {
+            $this->reloadUnreachableConnections($maxRetries);
+        }
     }
 
     public function getPermanentlyFailedConnections(): DbConfigCollection

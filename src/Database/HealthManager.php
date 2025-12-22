@@ -312,8 +312,6 @@ class HealthManager implements HealthManagerInterface
         }
         return -1; // No encontrado
     }
-
-
     /**
      * Notifica al canal de control principal
      */
@@ -329,7 +327,6 @@ class HealthManager implements HealthManagerInterface
             // Canal lleno o cerrado, es normal durante shutdown
         }
     }
-
     /**
      * Detiene todos los health checks gracefulmente
      */
@@ -396,7 +393,6 @@ class HealthManager implements HealthManagerInterface
 
         return $results;
     }
-
     /**
      * Ejecuta los health checks
      * public function performHealthChecks(int $workerId = 0, bool $resetFailures = false): array
@@ -420,7 +416,6 @@ class HealthManager implements HealthManagerInterface
      * return $results;
      * }
      */
-
     /**
      * Realiza health check de todas las conexiones cargadas
      * @param int $workerId
