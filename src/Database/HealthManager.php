@@ -559,7 +559,7 @@ class HealthManager implements HealthManagerInterface
     {
         $this->checkHistory[] = $entry;
 
-        $this?->storage->add(json_encode($entry, JSON_THROW_ON_ERROR));
+        $this?->storage->add($entry);
 
         // Mantener tamaño limitado
         if (count($this->checkHistory) > self::MAX_HISTORY) {
