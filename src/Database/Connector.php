@@ -167,7 +167,7 @@ class Connector
             $connections = $this->fetchUnreachableConnections();
             if($connections->count() > 0) {
                 $this->logger?->debug("Attempting to reload unreachable connections (try #$try)");
-                $this->reloadConnections($this->fetchUnreachableConnections(), $maxRetries);
+                $this->reloadConnections($connections, $maxRetries);
             }
         }
 
