@@ -461,7 +461,7 @@ class HealthManager implements HealthManagerInterface
             $initialPoolsUp = $this->connector->getPoolGroupNames();
             if ($resetFailures === true) {
                 try {
-                    $this->connector->retryFailedConnections();
+                    $this->connector->retryFailedConnections(1);
                 } catch (Throwable $e) {
                     $this->logger?->error("Error reloading permanent failed connections: " . $e->getMessage());
                 }
