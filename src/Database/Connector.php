@@ -156,12 +156,19 @@ class Connector
             $this->loadedConnections->addIfNotExist($config);
         }
     }
+
+    /**
+     * @throws InvalidArgumentException
+     */
     private function reloadUnreachableConnections(int $maxRetries = 3): void
     {
         $try = 0;
         while ($try++ < $maxRetries) {
-            $this->logger?->debug("Attempting to reload unreachable connections (try #$try)");
-            $this->reloadConnections($this->fetchUnreachableConnections(), $maxRetries);
+            $connections = $this->fetchUnreachableConnections();
+            if($connections->count() > 0) {
+                $this->logger?->debug("Attempting to reload unreachable connections (try #$try)");
+                $this->reloadConnections($this->fetchUnreachableConnections(), $maxRetries);
+            }
         }
 
     }
@@ -185,8 +192,12 @@ class Connector
         return $this->reloadConnections($this->fetchUnreachableConnections(), $maxRetries);
     }
 
-
     /**
+     * Reloads and attempts reconnections to a collection of database connections, with a specified maximum number of retries.
+     *
+     * @param DbConfigCollection $connections A collection of database configurations to reload.
+     * @param int $maxRetries The maximum number of reconnection attempts for each connection (default is 3).
+     * @return array An array containing the total number of connections, and counts of successful and failed reconnections.
      * @throws InvalidArgumentException
      */
     private function reloadConnections(DbConfigCollection $connections, int $maxRetries = 3): array
@@ -254,8 +265,16 @@ class Connector
         return $results;
     }
 
+    /**
+     * @param int $maxRetries
+     * @return void
+     * @throws InvalidArgumentException
+     */
     public function healthCheckLoadedConnections(int $maxRetries = 3): void
     {
+        if($this->unreachableConnections->count() > 0) {
+            $this->reloadUnreachableConnections($maxRetries);
+        }
         foreach ($this->loadedConnections as $config) {
             if (!$config->canConnect()) {
                 $cfg = $config->toArray();
@@ -266,9 +285,6 @@ class Connector
                 $this->unreachableConnections->addIfNotExist($config);
                 $this->removePool($config->name);
             }
-        }
-        if($this->unreachableConnections->count() > 0) {
-            $this->reloadUnreachableConnections($maxRetries);
         }
     }
 

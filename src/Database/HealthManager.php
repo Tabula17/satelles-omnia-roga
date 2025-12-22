@@ -81,7 +81,7 @@ class HealthManager implements HealthManagerInterface
             'status' => 'starting',
             'failures' => 0,
             'unreachable' => 0,
-           // 'last_unreachable_check' => 0,
+            // 'last_unreachable_check' => 0,
             'permanent' => 0,
             'last_permanent_check' => time(),
         ];
@@ -160,19 +160,21 @@ class HealthManager implements HealthManagerInterface
                 }
 
                 $this->logger?->debug("🏥 [Worker #{$workerId}] Ejecutando health check...");
-                $result = $this->performHealthChecks($workerId, $retryUnreachable, $resetFailures);
+                $result = $this->performHealthChecks($workerId, $resetFailures);
                 $this->runningWorkers[$workerId]['cycle_count']++;
-
-                if (isset($this->notifier) && $result['status_change'] > 0) {
-                    $this->notifyControlChannel('recovery_attempt', [
-                        'worker_id' => $workerId,
-                        'recovery_result' => [
-                            'recovered' => count($result['pools_up']),
-                            'failed' => count($result['pools_down']),
-                            'unchanged' => $result['pools_unchanged']
-                        ],
-                        'timestamp' => time()
-                    ]);
+                if ($result['status_change'] > 0) {
+                    $this->logger?->debug("Cambios en las conexiones: " . implode(", ", $result['pools_up']) . " (removidas: " . implode(", ", $result['pools_down']) . ", Informar a workers");
+                    if (isset($this->notifier)) {
+                        $this->notifyControlChannel('recovery_attempt', [
+                            'worker_id' => $workerId,
+                            'recovery_result' => [
+                                'recovered' => count($result['pools_up']),
+                                'failed' => count($result['pools_down']),
+                                'unchanged' => $result['pools_unchanged']
+                            ],
+                            'timestamp' => time()
+                        ]);
+                    }
                 }
 
                 $this->addToHistory($result);
@@ -312,6 +314,7 @@ class HealthManager implements HealthManagerInterface
         }
         return -1; // No encontrado
     }
+
     /**
      * Notifica al canal de control principal
      */
@@ -327,6 +330,7 @@ class HealthManager implements HealthManagerInterface
             // Canal lleno o cerrado, es normal durante shutdown
         }
     }
+
     /**
      * Detiene todos los health checks gracefulmente
      */
