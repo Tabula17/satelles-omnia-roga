@@ -690,6 +690,7 @@ class HealthManager implements HealthManagerInterface
         if (!$this->stopping && !empty($this->workerControlChannels)) {
             $this->logger?->warning("🏥 HealthManager destruido sin stopGracefully(), limpiando canales");
             $this->closeAllChannels();
+            $this->storage?->clear();
         }
     }
 
