@@ -134,49 +134,23 @@ class HealthManager implements HealthManagerInterface
                 $this->logger?->debug("🏥 [Worker #{$workerId}] Ejecutando health check...");
                 $checkStart = microtime(true);
                 $result = $this->performHealthChecks($workerId);
-                $checkDuration = microtime(true) - $checkStart;
 
-                // Actualizar estadísticas del worker
-                $this->runningWorkers[$workerId]['last_check'] = time();
-                $this->runningWorkers[$workerId]['cycle_count'] = $loopCounter;
-                $this->runningWorkers[$workerId]['last_duration'] = $checkDuration;
-                $this->runningWorkers[$workerId]['last_result'] = $result['overall_healthy'];
 
-                // Manejar fallos consecutivos
-                if ($result['overall_healthy']) {
-                    $this->runningWorkers[$workerId]['consecutive_failures'] = 0;
-                    $this->runningWorkers[$workerId]['last_success'] = time();
-                    $this->logger?->debug("🏥 [Worker #{$workerId}] Health check OK ({$checkDuration}s)");
-                } else {
-                    $this->runningWorkers[$workerId]['consecutive_failures']++;
-                    $this->runningWorkers[$workerId]['last_failure'] = time();
-
-                    $failures = $this->runningWorkers[$workerId]['consecutive_failures'];
-                    $this->logger?->warning("🏥 [Worker #{$workerId}] Health check FAILED ({$failures} consecutivos)");
-
-                    // Si hay muchos fallos consecutivos, intentar recuperación
-                    if ($failures >= 3) {
-                        $this->logger?->warning("🏥 [Worker #{$workerId}] 3+ fallos consecutivos, intentando recuperación...");
-                        $this->handleConsecutiveFailures($workerId);
-                    }
+                if (isset($this->notifier) && $result['status_change'] > 0) {
+                    $this->notifyControlChannel('recovery_attempt', [
+                        'worker_id' => $workerId,
+                        'recovery_result' => [
+                            'recovered' => count($result['pools_up']),
+                            'failed' => count($result['pools_down']),
+                            'unchanged' => $result['pools_unchanged']
+                        ],
+                        'timestamp' => time()
+                    ]);
                 }
 
                 // Guardar en historial
                 $lastCheck = $this->checkHistory[array_key_last($this->checkHistory)] ?? [];
-                $newCheck = [
-                    'worker_id' => $workerId,
-                    'timestamp' => time(),
-                    'duration' => $checkDuration,
-                    'healthy' => $result['overall_healthy'],
-                    'health_status' => $result['health_status'] ?? [],
-                    'stats' => $result['pool_stats'] ?? []
-                ];
-                $this->addToHistory($newCheck);
-
-                // Notificar cambios si hay notificador configurado
-                if (isset($this->notifier)) {
-                    $this->notifyIfChanges($lastCheck, $newCheck);
-                }
+                $this->addToHistory($result);
 
                 $this->logger?->debug("🏥 [Worker #{$workerId}] Esperando {$this->checkInterval}ms...");
 
@@ -201,6 +175,7 @@ class HealthManager implements HealthManagerInterface
             $this->logger?->info("✅ [Worker #{$workerId}] HealthCheckLoop FINALIZADO - Total ciclos: {$loopCounter}");
         }
     }
+
     /**
      * Sleep que puede ser interrumpido por señal de stop (versión para Swoole original)
      */
@@ -439,61 +414,18 @@ class HealthManager implements HealthManagerInterface
             $retry = $this->retryPermanentFailures($workerId);
         }
 
-        $results = [
+        /*$results = [
             'worker_id' => $workerId,
             'timestamp' => time(),
             'overall_healthy' => true,
             'checks' => []
-        ];
-
+        ];*/
+        $results = $this->connector->performHealthCheck();
+        $results['worker_id'] = $workerId;
         try {
             // 1. Obtener estadísticas de pools
             $poolStats = $this->connector->getPoolStats();
             $results['pool_stats'] = $poolStats;
-
-            // 2. Obtener estado de salud
-            $healthStatus = $this->connector->getHealthStatus();
-            $results['health_status'] = $healthStatus;
-
-            // 3. Evaluar salud general basado en pools
-            foreach ($poolStats as $poolName => $stats) {
-                $poolHealthy = true;
-                $poolDetails = ['name' => $poolName];
-
-                // Verificar conexiones activas
-                if (isset($stats['active']) && $stats['active'] === 0) {
-                    $poolHealthy = false;
-                    $poolDetails['error'] = 'No hay conexiones activas';
-                }
-
-                // Verificar conexiones en espera (si aplica)
-                if (isset($stats['waiting']) && $stats['waiting'] > 10) {
-                    $poolDetails['warning'] = "Muchas conexiones en espera: {$stats['waiting']}";
-                }
-
-                // Verificar errores recientes
-                if (isset($stats['errors']) && $stats['errors'] > 0) {
-                    $poolDetails['errors'] = $stats['errors'];
-                    if ($stats['errors'] > 5) {
-                        $poolHealthy = false;
-                    }
-                }
-
-                $results['checks'][$poolName] = [
-                    'healthy' => $poolHealthy,
-                    'details' => $poolDetails
-                ];
-
-                if (!$poolHealthy) {
-                    $results['overall_healthy'] = false;
-                }
-            }
-
-            // 4. Verificar estado general del connector
-            if (isset($healthStatus['status']) && $healthStatus['status'] !== 'healthy') {
-                $results['overall_healthy'] = false;
-                $results['connector_status'] = $healthStatus['status'];
-            }
 
         } catch (\Exception $e) {
             $this->logger?->error("🏥 Worker #{$workerId}: Error en health check: " . $e->getMessage());
@@ -521,13 +453,6 @@ class HealthManager implements HealthManagerInterface
                 $result['recovered'] ?? 0,
                 $result['failed'] ?? 0
             ));
-
-            // Resetear contador de fallos consecutivos si hubo recuperaciones
-            if (isset($result['recovered']) && $result['recovered'] > 0 && isset($this->runningWorkers[$workerId])) {
-                $this->runningWorkers[$workerId]['consecutive_failures'] = 0;
-                $this->runningWorkers[$workerId]['last_recovery'] = time();
-            }
-
             return $result;
 
         } catch (\Exception $e) {

@@ -288,9 +288,8 @@ class Connector
     public function performHealthCheck(): array
     {
         $startTime = microtime(true);
-        $checked = 0;
-        $failed = 0;
-
+        $initialCount = $this->loadedConnections->count();
+        $initialPoolsUp = array_keys($this->poolCount);
         $this->healthCheckLoadedConnections();
 
         // También intentar reconectar las inalcanzables periódicamente
@@ -301,13 +300,36 @@ class Connector
                 $this->logger?->error("Error reloading unreachable connections: " . $e->getMessage());
             }
         }
+        $this->logger?->debug("Health check finished in " . round((microtime(true) - $startTime) * 1000, 2) . "ms");
+
+        $online = $this->loadedConnections->count();
+        $unreachable = $this->unreachableConnections->count();
+        $permanentFailures = $this->permanentlyFailedConnections->count();
+        $totalConnections = $initialCount + $unreachable + $permanentFailures;
+        $failed = $unreachable + $permanentFailures;
+        $changed = $initialCount - $online;
+        $healthy = $totalConnections - $failed;
+        $poolsNow = array_keys($this->poolCount);
+        $poolsUp = array_diff($poolsNow, $initialPoolsUp);
+        $poolsDown = array_diff($initialPoolsUp, $poolsNow);
+
 
         return [
             'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
-            'checked' => $this->loadedConnections->count(),
-            'unreachable' => $this->unreachableConnections->count(),
-            'permanent_failures' => $this->permanentlyFailedConnections->count(),
-            'total_pools' => $this->pools->count(),
+            'loaded_connections' => $online,
+            'unreachable_connections' => $unreachable,
+            'permanent_failures' => $permanentFailures,
+            'status_change' => abs($changed),
+            'status_change_percentage' => round(($changed / $totalConnections) * 100, 2),
+            'healthy' => $healthy,
+            'failed' => $failed,
+            'overall_healthy' => $healthy === $totalConnections,
+            'healthy_percentage' => round(($healthy / $totalConnections) * 100, 2),
+            'active_pools' => $this->pools->count(),
+            'pools_online' => $poolsNow,
+            'pools_up' => $poolsUp,
+            'pools_down' => $poolsDown,
+            'pools_unchanged' => count($initialPoolsUp) - count($poolsUp) - count($poolsDown),
             'timestamp' => time()
         ];
     }
