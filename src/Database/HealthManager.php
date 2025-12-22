@@ -153,7 +153,7 @@ class HealthManager implements HealthManagerInterface
                     if ($retryUnreachable) {
                         $this->logger?->debug("🏥 [Worker #{$workerId}] Vamos a tratar de recuperar {$lastCheck['unreachable_connections']} conexiones...");
                     } else if ($lastCheck['unreachable_connections'] > 0) {
-                        $nextCheck = date('Y-m-d H:i:s', $this->runningWorkers[$workerId]['last_unreachable_check'] + 420);
+                        $nextCheck = date('Y-m-d H:i:s', $this->runningWorkers[$workerId]['last_unreachable_check'] + 300);
                         $this->logger?->debug("🏥 [Worker #{$workerId}] Existen conexiones inalcanzables, próximo chequeo {$nextCheck}.");
                     }
                     $resetFailures = $lastCheck['permanent_failures'] > 0 && (time() - 1500) > $this->runningWorkers[$workerId]['last_permanent_check'];
