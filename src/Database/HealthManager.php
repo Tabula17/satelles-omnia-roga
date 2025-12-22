@@ -8,7 +8,10 @@ use Psr\Log\LoggerInterface;
 use Swoole\Coroutine;
 use Swoole\Coroutine\Channel;
 use Swoole\Server;
+use Tabula17\Satelles\Utilis\Cache\CacheManagerInterface;
+use Tabula17\Satelles\Utilis\Cache\RedisStorage;
 use Tabula17\Satelles\Utilis\Connectable\HealthManagerInterface;
+use Tabula17\Satelles\Utilis\List\ListInterface;
 use Tabula17\Satelles\Utilis\Trait\CoroutineHelper;
 use Throwable;
 
@@ -47,6 +50,7 @@ class HealthManager implements HealthManagerInterface
         Connector                         $connector,
         int                               $checkInterval = 30000, // 30 segundos por defecto
         private readonly int              $maxRetries = 3,
+        private readonly ?ListInterface   $storage = null,
         private readonly ?LoggerInterface $logger = null
     )
     {
@@ -555,9 +559,12 @@ class HealthManager implements HealthManagerInterface
     {
         $this->checkHistory[] = $entry;
 
+        $this?->storage->add(json_encode($entry, JSON_THROW_ON_ERROR));
+
         // Mantener tamaño limitado
         if (count($this->checkHistory) > self::MAX_HISTORY) {
             array_shift($this->checkHistory);
+            $this?->storage->pop();
         }
     }
 
