@@ -678,7 +678,7 @@ class HealthManager implements HealthManagerInterface
      */
     public function getCheckHistory(int $limit = 20): array
     {
-        return array_slice($this->storage ? $this->storage->get() : $this->checkHistory, -$limit);
+        return array_slice($this->storage ? $this->storage->tail($limit) : $this->checkHistory, -$limit);
     }
 
     /**
