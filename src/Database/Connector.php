@@ -272,9 +272,6 @@ class Connector
      */
     public function healthCheckLoadedConnections(int $maxRetries = 3): void
     {
-        if($this->unreachableConnections->count() > 0) {
-            $this->reloadUnreachableConnections($maxRetries);
-        }
         foreach ($this->loadedConnections as $config) {
             if (!$config->canConnect()) {
                 $cfg = $config->toArray();
@@ -285,6 +282,9 @@ class Connector
                 $this->unreachableConnections->addIfNotExist($config);
                 $this->removePool($config->name);
             }
+        }
+        if($this->unreachableConnections->count() > 0) {
+            $this->reloadUnreachableConnections($maxRetries);
         }
     }
 
