@@ -284,13 +284,11 @@ class Connector
     /**
      * Realiza health check de todas las conexiones cargadas
      * @return array Estadísticas del health check
-     */
     public function performHealthCheck(): array
     {
         $startTime = microtime(true);
         $initialCount = $this->loadedConnections->count();
         $initialPoolsUp = array_keys($this->poolCount);
-        $this->healthCheckLoadedConnections();
 
         // También intentar reconectar las inalcanzables periódicamente
         if (time() % 300 === 0) { // Cada 5 minutos
@@ -300,6 +298,7 @@ class Connector
                 $this->logger?->error("Error reloading unreachable connections: " . $e->getMessage());
             }
         }
+        $this->healthCheckLoadedConnections();
         $this->logger?->debug("Health check finished in " . round((microtime(true) - $startTime) * 1000, 2) . "ms");
 
         $online = $this->loadedConnections->count();
@@ -307,11 +306,11 @@ class Connector
         $permanentFailures = $this->permanentlyFailedConnections->count();
         $totalConnections = $initialCount + $unreachable + $permanentFailures;
         $failed = $unreachable + $permanentFailures;
-        $changed = $initialCount - $online;
         $healthy = $totalConnections - $failed;
         $poolsNow = array_keys($this->poolCount);
         $poolsUp = array_diff($poolsNow, $initialPoolsUp);
         $poolsDown = array_diff($initialPoolsUp, $poolsNow);
+        $changed = count($poolsUp) + count($poolsDown);
 
 
         return [
@@ -333,6 +332,7 @@ class Connector
             'timestamp' => time()
         ];
     }
+*/
 
     /**
      * @return array Estado general del connector
@@ -347,6 +347,11 @@ class Connector
             'pool_groups' => array_keys($this->poolCount),
             'timestamp' => time()
         ];
+    }
+
+    public function getActivePoolsCount(): int
+    {
+        return $this->pools->count();
     }
 
     /**

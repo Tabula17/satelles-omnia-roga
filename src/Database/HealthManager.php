@@ -10,6 +10,7 @@ use Swoole\Coroutine\Channel;
 use Swoole\Server;
 use Tabula17\Satelles\Utilis\Connectable\HealthManagerInterface;
 use Tabula17\Satelles\Utilis\Trait\CoroutineHelper;
+use Throwable;
 
 /**
  * Class HealthManager
@@ -77,7 +78,9 @@ class HealthManager implements HealthManagerInterface
             'last_check' => 0,
             'cycle_count' => 0,
             'status' => 'starting',
-            'consecutive_failures' => 0
+            'failures' => 0,
+            'unreachable' => 0,
+            'permanent' => 0,
         ];
 
         // Calcular offset escalonado
@@ -118,23 +121,36 @@ class HealthManager implements HealthManagerInterface
     private function runHealthCheckLoop(Server $server, int $workerId, Channel $controlChannel): void
     {
         $cid = Coroutine::getCid();
-        $this->logger?->info("🚀 [Worker #{$workerId}] HealthCheckLoop INICIADO - Coroutine ID: {$cid}");
+        $this->logger?->info("🏥 🚀 [Worker #{$workerId}] HealthCheckLoop INICIADO - Coroutine ID: {$cid}");
 
         $loopCounter = 0;
         try {
             while (true) {
                 $loopCounter++;
-                $this->logger?->debug("🔄 [Worker #{$workerId}] Ciclo #{$loopCounter} - Verificando shouldStop...");
+                $this->logger?->debug("🏥 : 🔄 [Worker #{$workerId}] Ciclo #{$loopCounter} - Verificando shouldStop...");
 
                 if ($this->shouldStop($controlChannel, $workerId)) {
                     $this->logger?->info("🛑 [Worker #{$workerId}] shouldStop() retornó true");
                     break;
                 }
+                // Guardar en historial
+                $lastCheck = $this->checkHistory[array_key_last($this->checkHistory)] ?? [];
+
+                $retryUnreachable = false;
+                $resetFailures = false;
+                if (!empty($lastCheck) && $lastCheck['overall_healthy'] === false) {
+                    $retryUnreachable = $lastCheck['unreachable_connections'] > 0 && $lastCheck['timestamp'] > time() - 300;
+                    if ($retryUnreachable) {
+                        $this->logger?->debug("🏥 [Worker #{$workerId}] Vamos a tratar de recuperar {$lastCheck['unreachable_connections']} conexiones...");
+                    }
+                    $resetFailures = $lastCheck['permanent_failures'] > 0 && $lastCheck['timestamp'] > time() - 1500;
+                    if ($resetFailures) {
+                        $this->logger?->debug("🏥 [Worker #{$workerId}] Vamos a intentar recuperar {$lastCheck['permanent_failures']} fallos permanentes...");
+                    }
+                }
 
                 $this->logger?->debug("🏥 [Worker #{$workerId}] Ejecutando health check...");
-                $checkStart = microtime(true);
-                $result = $this->performHealthChecks($workerId);
-
+                $result = $this->performHealthChecks($workerId, $retryUnreachable, $resetFailures);
 
                 if (isset($this->notifier) && $result['status_change'] > 0) {
                     $this->notifyControlChannel('recovery_attempt', [
@@ -148,8 +164,6 @@ class HealthManager implements HealthManagerInterface
                     ]);
                 }
 
-                // Guardar en historial
-                $lastCheck = $this->checkHistory[array_key_last($this->checkHistory)] ?? [];
                 $this->addToHistory($result);
 
                 $this->logger?->debug("🏥 [Worker #{$workerId}] Esperando {$this->checkInterval}ms...");
@@ -293,7 +307,7 @@ class HealthManager implements HealthManagerInterface
      */
     private function handleConsecutiveFailures(int $workerId): void
     {
-        $failures = $this->runningWorkers[$workerId]['consecutive_failures'];
+        $failures = $this->runningWorkers[$workerId]['failures'];
         $this->logger?->warning("🏥 Worker #{$workerId}: {$failures} fallos consecutivos detectados");
 
         // Intentar recuperar conexiones fallidas usando el método del Connector
@@ -302,7 +316,7 @@ class HealthManager implements HealthManagerInterface
 
             if ($recoveryResult['recovered'] > 0) {
                 $this->logger?->info("Worker #{$workerId}: Recuperadas {$recoveryResult['recovered']} conexiones");
-                $this->runningWorkers[$workerId]['consecutive_failures'] = 0;
+                $this->runningWorkers[$workerId]['failures'] = 0;
                 $this->runningWorkers[$workerId]['recovery_attempts'] =
                     ($this->runningWorkers[$workerId]['recovery_attempts'] ?? 0) + 1;
             } else {
@@ -313,7 +327,7 @@ class HealthManager implements HealthManagerInterface
             $this->notifyControlChannel('recovery_attempt', [
                 'worker_id' => $workerId,
                 'recovery_result' => $recoveryResult,
-                'consecutive_failures' => $failures,
+                'failures' => $failures,
                 'timestamp' => time()
             ]);
 
@@ -407,33 +421,100 @@ class HealthManager implements HealthManagerInterface
 
     /**
      * Ejecuta los health checks
+     * public function performHealthChecks(int $workerId = 0, bool $resetFailures = false): array
+     * {
+     * if ($resetFailures) {
+     * $retry = $this->retryPermanentFailures($workerId);
+     * }
+     * $results = $this->connector->performHealthCheck();
+     * $results['worker_id'] = $workerId;
+     * try {
+     * // 1. Obtener estadísticas de pools
+     * $poolStats = $this->connector->getPoolStats();
+     * $results['pool_stats'] = $poolStats;
+     *
+     * } catch (\Exception $e) {
+     * $this->logger?->error("🏥 Worker #{$workerId}: Error en health check: " . $e->getMessage());
+     * $results['error'] = $e->getMessage();
+     * $results['overall_healthy'] = false;
+     * }
+     *
+     * return $results;
+     * }
      */
-    public function performHealthChecks(int $workerId = 0, bool $resetFailures = false): array
+
+    /**
+     * Realiza health check de todas las conexiones cargadas
+     * @param int $workerId
+     * @param bool $resetFailures
+     * @return array Estadísticas del health check
+     */
+    public function performHealthChecks(int $workerId = 0, bool $retryUnreachable = false, bool $resetFailures = false): array
     {
-        if ($resetFailures) {
-            $retry = $this->retryPermanentFailures($workerId);
-        }
-
-        /*$results = [
-            'worker_id' => $workerId,
-            'timestamp' => time(),
-            'overall_healthy' => true,
-            'checks' => []
-        ];*/
-        $results = $this->connector->performHealthCheck();
-        $results['worker_id'] = $workerId;
         try {
-            // 1. Obtener estadísticas de pools
-            $poolStats = $this->connector->getPoolStats();
-            $results['pool_stats'] = $poolStats;
+            $startTime = microtime(true);
+            $this->logger?->debug("🏥 Health check iniciado en " . round(($startTime - time()) * 1000, 2) . "ms");
+            $initialCount = $this->connector->getActiveConnectionsCount();
+            $initialPoolsUp = $this->connector->getPoolGroupNames();
+            if ($resetFailures === true) {
+                try {
+                    $this->connector->retryFailedConnections();
+                } catch (Throwable $e) {
+                    $this->logger?->error("Error reloading permanent failed connections: " . $e->getMessage());
+                }
+            }
+            // También intentar reconectar las inalcanzables periódicamente
+            if ($retryUnreachable) {
+                try {
+                    $this->connector->reloadUnreachableConnections();
+                } catch (Throwable $e) {
+                    $this->logger?->error("Error reloading unreachable connections: " . $e->getMessage());
+                }
+            }
+            $this->connector->healthCheckLoadedConnections();
+            $this->logger?->debug("Health check finished in " . round((microtime(true) - $startTime) * 1000, 2) . "ms");
 
+            $online = $this->connector->getActiveConnectionsCount();
+            $unreachable = $this->connector->getUnreachableCount();
+            $permanentFailures = $this->connector->getPermanentlyFailedCount();
+            $totalConnections = $initialCount + $unreachable + $permanentFailures;
+            $failed = $unreachable + $permanentFailures;
+            $healthy = $totalConnections - $failed;
+            $poolsNow = $this->connector->getPoolGroupNames();
+            $poolsUp = array_diff($poolsNow, $initialPoolsUp);
+            $poolsDown = array_diff($initialPoolsUp, $poolsNow);
+            $changed = count($poolsUp) + count($poolsDown);
+
+
+            return [
+                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+                'loaded_connections' => $online,
+                'unreachable_connections' => $unreachable,
+                'permanent_failures' => $permanentFailures,
+                'status_change' => abs($changed),
+                'status_change_percentage' => round(($changed / $totalConnections) * 100, 2),
+                'healthy' => $healthy,
+                'failed' => $failed,
+                'overall_healthy' => $healthy === $totalConnections,
+                'healthy_percentage' => round(($healthy / $totalConnections) * 100, 2),
+                'active_pools' => $this->connector->getActivePoolsCount(),
+                'pools_online' => $poolsNow,
+                'pools_up' => $poolsUp,
+                'pools_down' => $poolsDown,
+                'pools_unchanged' => count($initialPoolsUp) - count($poolsUp) - count($poolsDown),
+                'timestamp' => time(),
+                'pool_stats' => $this->connector->getPoolStats(),
+                'worker_id' => $workerId
+            ];
         } catch (\Exception $e) {
-            $this->logger?->error("🏥 Worker #{$workerId}: Error en health check: " . $e->getMessage());
-            $results['error'] = $e->getMessage();
-            $results['overall_healthy'] = false;
+            $this->logger?->error("🏥  Error en health check: " . $e->getMessage());
+            return [
+                'error' => $e->getMessage(),
+                'overall_healthy' => false,
+                'timestamp' => time()
+            ];
         }
 
-        return $results;
     }
 
     /**
@@ -593,7 +674,7 @@ class HealthManager implements HealthManagerInterface
                 'last_check' => $info['last_check'] ?? 0,
                 'cycle_count' => $info['cycle_count'] ?? 0,
                 'last_duration' => $info['last_duration'] ?? 0,
-                'consecutive_failures' => $info['consecutive_failures'] ?? 0,
+                'failures' => $info['failures'] ?? 0,
                 'last_success' => $info['last_success'] ?? 0,
                 'last_failure' => $info['last_failure'] ?? 0,
                 'recovery_attempts' => $info['recovery_attempts'] ?? 0,
