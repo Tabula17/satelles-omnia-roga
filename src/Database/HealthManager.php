@@ -146,20 +146,20 @@ class HealthManager implements HealthManagerInterface
                 $retryUnreachable = false;
                 $resetFailures = false;
                 if (!empty($lastCheck) && $lastCheck['overall_healthy'] === false) {
-                    $lastChecked = date('Y-m-d H:i:s', min($lastCheck['timestamp'], $lastCheck['unreachable_connections'], $lastCheck['permanent_failures']));
+                    $lastChecked = date('Y-m-d H:i:s', min($lastCheck['timestamp'], $this->runningWorkers[$workerId]['last_unreachable_check'], $this->runningWorkers[$workerId]['last_permanent_check']));
                     $this->logger?->info("🏥 [Worker #{$workerId}] Comprobando si hay conexiones que puedan recuperarse, chequeo anterior: {$lastChecked}...");
 
                     $retryUnreachable = $lastCheck['unreachable_connections'] > 0 && (time() - 420) > $this->runningWorkers[$workerId]['last_unreachable_check'];
                     if ($retryUnreachable) {
                         $this->logger?->debug("🏥 [Worker #{$workerId}] Vamos a tratar de recuperar {$lastCheck['unreachable_connections']} conexiones...");
-                    }else if($lastCheck['unreachable_connections'] > 0){
+                    } else if ($lastCheck['unreachable_connections'] > 0) {
                         $nextCheck = date('Y-m-d H:i:s', $this->runningWorkers[$workerId]['last_unreachable_check'] + 420);
                         $this->logger?->debug("🏥 [Worker #{$workerId}] Existen conexiones inalcanzables, próximo chequeo {$nextCheck}.");
                     }
                     $resetFailures = $lastCheck['permanent_failures'] > 0 && (time() - 1500) > $this->runningWorkers[$workerId]['last_permanent_check'];
                     if ($resetFailures) {
                         $this->logger?->debug("🏥 [Worker #{$workerId}] Vamos a intentar recuperar {$lastCheck['permanent_failures']} fallos permanentes...");
-                    }else if($lastCheck['permanent_failures'] > 0){
+                    } else if ($lastCheck['permanent_failures'] > 0) {
                         $nextCheck = date('Y-m-d H:i:s', $this->runningWorkers[$workerId]['last_permanent_check'] + 1500);
                         $this->logger?->debug("🏥 [Worker #{$workerId}] Existen conexiones con fallos considerados permanentes, intentaremos después de {$nextCheck}.");
                     }
@@ -448,6 +448,7 @@ class HealthManager implements HealthManagerInterface
             if ($resetFailures === true) {
                 try {
                     $this->runningWorkers[$workerId]['last_permanent_check'] = time();
+                    $this->logger?->debug("🏥 Reintentando conexiones fallidas...");
                     $this->connector->retryFailedConnections();
                 } catch (Throwable $e) {
                     $this->logger?->error("Error reloading permanent failed connections: " . $e->getMessage());
@@ -457,13 +458,14 @@ class HealthManager implements HealthManagerInterface
             if ($retryUnreachable) {
                 try {
                     $this->runningWorkers[$workerId]['last_unreachable_check'] = time();
+                    $this->logger?->debug("🏥 Reintentando conexiones inalcanzables...");
                     $this->connector->reloadUnreachableConnections();
                 } catch (Throwable $e) {
                     $this->logger?->error("Error reloading unreachable connections: " . $e->getMessage());
                 }
             }
             $this->connector->healthCheckLoadedConnections();
-            $this->logger?->debug("Health check finished in " . round((microtime(true) - $startTime) * 1000, 2) . "ms");
+            $this->logger?->debug("🏥 Health check finished in " . round((microtime(true) - $startTime) * 1000, 2) . "ms");
 
             $online = $this->connector->getActiveConnectionsCount();
             $unreachable = $this->connector->getUnreachableCount();
