@@ -26,33 +26,9 @@ class MetadataDescriptor extends AbstractDescriptor
             $this->operation = strtolower($value);
         }
     }
-    protected(set) array|null $variant = null
-        {
-            set(array|null|string $value) {
-                if ($value !== null) {
-                    $value = is_array($value) ? $value : explode(',', $value);
-                    $this->variant = $value;
-                }
-            }
-        }
-    protected(set) array|null $allowed = null
-        {
-            set(array|null|string $value) {
-                if ($value !== null) {
-                    $value = is_array($value) ? $value : explode(',', $value);
-                    $this->allowed = $value;
-                }
-            }
-        }
-    protected(set) array|null $client = null
-        {
-            set(array|null|string $value) {
-                if ($value !== null) {
-                    $value = is_array($value) ? $value : explode(',', $value);
-                    $this->client = $value;
-                }
-            }
-        }
+    protected(set) array|string|null $variant = null;
+    protected(set) array|string|null $allowed = null;
+    protected(set) array|string|null $client = null;
     protected(set) bool $quoteIdentifier = false;
     protected(set) string $version;
 
