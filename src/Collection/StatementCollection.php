@@ -69,7 +69,7 @@ class StatementCollection extends GenericCollection
         var_dump('searching', $member);
         return array_filter(array_unique(array_map(static function ($descriptor) use ($member) {//todo:review when setting $member, sometimes goes as array
             if(is_string($member) && $descriptor->metadata->offsetExists($member)) {
-                var_dump('result', $descriptor->metadata->{$member});
+                var_dump('result for '.$member, $descriptor->metadata->{$member});
                 return $descriptor->metadata->{$member};
             }
             return null;
