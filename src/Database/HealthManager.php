@@ -565,13 +565,15 @@ class HealthManager implements HealthManagerInterface
     {
         $this->checkHistory[] = $entry;
 
-        $this?->storage->add($entry);
-
+        $this->storage?->add($entry);
+        if ($this->storage?->getCount() > self::MAX_HISTORY) {
+            $this?->storage->pop();
+        }
         // Mantener tamaño limitado
         if (count($this->checkHistory) > self::MAX_HISTORY) {
             $this?->logger?->debug("🕰️ Trimming health check history to " . self::MAX_HISTORY . " entries");
             array_shift($this->checkHistory);
-            $this?->storage->pop();
+
         }
     }
 
@@ -702,7 +704,7 @@ class HealthManager implements HealthManagerInterface
 
     private function notify(string $type, array $message): void
     {
-        if (!$this->notifier || empty($message) ) {
+        if (!$this->notifier || empty($message)) {
             return;
         }
         $this->logger?->debug("💬 Notificando al canal de notificaciones (type: {$type})...");
@@ -710,7 +712,7 @@ class HealthManager implements HealthManagerInterface
         $notif([
             'type' => $type,
             'data' => $message,
-            'timestamp' =>  time()
+            'timestamp' => time()
         ]);
     }
 
