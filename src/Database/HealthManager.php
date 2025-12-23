@@ -453,7 +453,7 @@ class HealthManager implements HealthManagerInterface
             }
             $this->connector->healthCheckLoadedConnections($this->maxRetries);
             $this->logger?->debug("🏥 Health check finished in " . round((microtime(true) - $startTime) * 1000, 2) . "ms");
-            $allPools = $this->connector->getAllPoolNames();
+            $allPools = $this->connector->getAllPoolGroupsNames();
             $online = $this->connector->getActiveConnectionsCount();
             $unreachable = $this->connector->getUnreachableCount();
             $permanentFailures = $this->connector->getPermanentlyFailedCount();
