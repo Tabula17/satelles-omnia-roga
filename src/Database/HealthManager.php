@@ -169,12 +169,12 @@ class HealthManager implements HealthManagerInterface
                 if ($result['status_change'] > 0) {
                     $this->logger?->debug("Cambios en las conexiones: " . implode(", ", $result['pools_up']) . " (removidas: " . implode(", ", $result['pools_down']) . ", Informar a workers");
                     if (isset($this->notifier)) {
-                        $this->notifyControlChannel('recovery_attempt', [
+                        $this->notify('recovery_attempt', [
                             'worker_id' => $workerId,
                             'recovery_result' => [
                                 'recovered' => count($result['pools_up']),
                                 'failed' => count($result['pools_down']),
-                                'unchanged' => $result['pools_unchanged']
+                                'unchanged' => count($result['pools_unchanged'])
                             ],
                             'timestamp' => time()
                         ]);
@@ -700,40 +700,17 @@ class HealthManager implements HealthManagerInterface
         }
     }
 
-    private function notifyIfChanges(mixed $lastCheck, array $result)
+    private function notify(string $type, array $message): void
     {
-        if (!$this->notifier || empty($result) || empty($lastCheck)) {
+        if (!$this->notifier || empty($message) ) {
             return;
         }
-        if ($lastCheck['health_status']['timestamp']) {
-            $lastCheckTimestamp = $lastCheck['health_status']['timestamp'];
-            unset($lastCheck['health_status']['timestamp']);
-        }
-        if ($result['health_status']['timestamp']) {
-            $resultTimestamp = $result['health_status']['timestamp'];
-            unset($result['health_status']['timestamp']);
-        }
         $notif = $this->notifier;
-        // REVISAR, son diferentes los arrays!
-        if ($lastCheck['healthy'] !== $result['healthy'] || $lastCheck['health_status'] !== $result['health_status']) {
-
-            /**
-             * health_status:
-             *  active_pools: 5
-             *  loaded_connections: 5
-             *  permanent_failures: 0
-             *  pool_groups: ['sqldev', 'sqlsj', 'sqlpch', 'sqltuc', 'sigmydevsj']
-             *  unreachable_connections: 1
-             */
-            if ($result['health_status']['active_pools'] > $lastCheck['health_status']['active_pools']) {
-                $notif([
-                    'type' => 'pool_recovered',
-                    'data' => $result['health_status'],
-                    'lastChecked' => $lastCheckTimestamp ?? null,
-                    'currentChecked' => $resultTimestamp ?? time()
-                ]);
-            }
-        }
+        $notif([
+            'type' => $type,
+            'data' => $message,
+            'timestamp' =>  time()
+        ]);
     }
 
 }
