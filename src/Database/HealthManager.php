@@ -453,7 +453,7 @@ class HealthManager implements HealthManagerInterface
             }
             $this->connector->healthCheckLoadedConnections($this->maxRetries);
             $this->logger?->debug("🏥 Health check finished in " . round((microtime(true) - $startTime) * 1000, 2) . "ms");
-
+            $allPools = $this->connector->getAllPoolNames();
             $online = $this->connector->getActiveConnectionsCount();
             $unreachable = $this->connector->getUnreachableCount();
             $permanentFailures = $this->connector->getPermanentlyFailedCount();
@@ -464,6 +464,8 @@ class HealthManager implements HealthManagerInterface
             $poolsUp = array_diff($poolsNow, $initialPoolsUp);
             $poolsDown = array_diff($initialPoolsUp, $poolsNow);
             $changed = count($poolsUp) + count($poolsDown);
+            $poolsOffline = array_diff($allPools, $poolsNow);
+            $poolsUnchanged = array_intersect($initialPoolsUp, $poolsNow);;
 
 
             $this->runningWorkers[$workerId]['status'] = 'running';
@@ -480,9 +482,10 @@ class HealthManager implements HealthManagerInterface
                 'healthy_percentage' => round(($healthy / $totalConnections) * 100, 2),
                 'active_pools' => $this->connector->getActivePoolsCount(),
                 'pools_online' => $poolsNow,
+                'pools_offline' => $poolsOffline,
                 'pools_up' => $poolsUp,
                 'pools_down' => $poolsDown,
-                'pools_unchanged' => count($initialPoolsUp) - count($poolsUp) - count($poolsDown),
+                'pools_unchanged' => $poolsUnchanged,
                 'timestamp' => time(),
                 'pool_stats' => $this->connector->getPoolStats(),
                 'worker_id' => $workerId
