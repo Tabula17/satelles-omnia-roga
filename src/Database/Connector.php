@@ -149,6 +149,7 @@ class Connector
         $this->unreachableConnections->clear();
         return $connections;
     }
+
     public function resetUnreachableConnections(): void
     {
         $connections = $this->fetchUnreachableConnections();
@@ -165,7 +166,7 @@ class Connector
         $try = 0;
         while ($try++ < $maxRetries) {
             $connections = $this->fetchUnreachableConnections();
-            if($connections->count() > 0) {
+            if ($connections->count() > 0) {
                 $this->logger?->debug("Attempting to reload unreachable connections (try #$try)");
                 $this->reloadConnections($connections, $maxRetries);
             }
@@ -283,7 +284,7 @@ class Connector
                 $this->removePool($config->name);
             }
         }
-        if($this->unreachableConnections->count() > 0) {
+        if ($this->unreachableConnections->count() > 0) {
             $this->reloadUnreachableConnections($maxRetries);
         }
     }
@@ -606,6 +607,11 @@ class Connector
     public function getPoolGroupNames(): array
     {
         return array_keys($this->poolCount);
+    }
+
+    public function getAllPoolGroupsNames(): array
+    {
+        return array_merge($this->getPoolGroupNames(), $this->unreachableConnections->collect('name'), $this->permanentlyFailedConnections->collect('name'));
     }
 
     public function getPoolNamesForGroup($name): array
