@@ -65,7 +65,7 @@ class StatementCollection extends GenericCollection
      * @return array An array of unique metadata values for the specified member.
      */
     public function availableVariantsByMetadata(string $member): array
-    {
+    {var_export($member);
         return array_filter(array_unique(array_map(static function ($descriptor) use ($member) {//todo:review when setting $member, sometimes goes as array
             if(is_string($member) && $descriptor->metadata->offsetExists($member)) {
                 return $descriptor->metadata->{$member};
