@@ -565,7 +565,7 @@ class HealthManager implements HealthManagerInterface
         if (count($this->checkHistory) > self::MAX_HISTORY) {
             $this?->logger?->debug("🕰️ Trimming health check history to " . self::MAX_HISTORY . " entries");
             array_shift($this->checkHistory);
-            $this?->storage->trim(-1, -self::MAX_HISTORY);
+            $this?->storage->pop();
         }
     }
 
