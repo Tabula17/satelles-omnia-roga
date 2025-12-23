@@ -202,8 +202,11 @@ class HealthManager implements HealthManagerInterface
                 $this->logger?->error("🏥 [Worker #{$workerId}] Error en recuperación de emergencia: " .
                     $recoveryError->getMessage());
             }
+            $this->notifyControlChannel('health_check_error', ['worker_id' => $workerId, 'error' => $e->getMessage()]);
         } finally {
             $this->logger?->info("✅ [Worker #{$workerId}] HealthCheckLoop FINALIZADO - Total ciclos: {$loopCounter}");
+            $this->notifyControlChannel('health_check_finished', ['worker_id' => $workerId]);
+            $this->stopHealthCheckCycle();
         }
     }
 
