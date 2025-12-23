@@ -705,6 +705,7 @@ class HealthManager implements HealthManagerInterface
         if (!$this->notifier || empty($message) ) {
             return;
         }
+        $this->logger?->debug("💬 Notificando al canal de notificaciones (type: {$type})...");
         $notif = $this->notifier;
         $notif([
             'type' => $type,
