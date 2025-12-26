@@ -158,8 +158,9 @@ class HealthManager implements HealthManagerInterface
                     if ($resetFailures) {
                         $this->logger?->debug("🏥 [Worker #{$workerId}] Vamos a intentar recuperar {$lastCheck['permanent_failures']} fallos permanentes...");
                     } else if ($lastCheck['permanent_failures'] > 0) {
-                        $nextCheck = date('Y-m-d H:i:s', $this->runningWorkers[$workerId]['last_permanent_check'] + 1500);
-                        $this->logger?->debug("🏥 [Worker #{$workerId}] Existen conexiones con fallos considerados permanentes, intentaremos después de {$nextCheck}.");
+                        $rest = time() - $this->runningWorkers[$workerId]['last_permanent_check'] + 1500;
+                        $nextCheck = date('i\' s\'\'', $rest);
+                        $this->logger?->debug("🏥 [Worker #{$workerId}] Existen conexiones con fallos considerados permanentes, intentaremos en {$nextCheck}.");
                     }
                 }
 
