@@ -157,11 +157,11 @@ class HealthManager implements HealthManagerInterface
                     $resetFailures = $lastCheck['permanent_failures'] > 0 && (time() - 1500) > $this->runningWorkers[$workerId]['last_permanent_check'];
                     if ($resetFailures) {
                         $this->logger?->debug("🏥 [Worker #{$workerId}] Vamos a intentar recuperar {$lastCheck['permanent_failures']} fallos permanentes...");
-                    } else if ($lastCheck['permanent_failures'] > 0) {
+                    } else if ($lastCheck['permanent_failures'] > 0) {  $lastCheck = date('Y-m-d H:i:s', $this->runningWorkers[$workerId]['last_permanent_check']);
                         $remaining = $this->runningWorkers[$workerId]['last_permanent_check'] + 1500 - time();
-                        $effectiveRemaining = $this->checkInterval * (int)ceil($remaining / $this->checkInterval);
+                        $effectiveRemaining = ($this->checkInterval * (int)ceil(($remaining * 1000) / $this->checkInterval)) / 1000;
                         $nextCheck = date('i\' s\'\'', $effectiveRemaining);
-                        $this->logger?->debug("🏥 [Worker #{$workerId}] Existen conexiones con fallos considerados permanentes, intentaremos en {$nextCheck}.");
+                        $this->logger?->debug("🏥 [Worker #{$workerId}] Existen conexiones con fallos considerados permanentes, intentaremos en {$nextCheck}. Último chequeo: $lastCheck, proximo reseteo en: {$remaining}s, próximo reseteo efectivo: {$effectiveRemaining}s, intervalo de chequeos: {$this->checkInterval}ms");
                     }
                 }
 
