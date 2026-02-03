@@ -20,7 +20,7 @@ use Tabula17\Satelles\Utilis\Middleware\TCPmTLSAuthMiddleware;
  *
  * Extends the Swoole\Server class to implement a custom TCP server with support for
  * connection pools, database configurations, and specific request processing.
- * It includes methods for handling server initialization, request processing, and
+* It includes methods for handling server initialization, request processing, and
  * response handling, with logging and error management capabilities.
  */
 class Server extends \Swoole\Server
