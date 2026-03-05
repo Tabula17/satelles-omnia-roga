@@ -35,7 +35,9 @@
     "ext-dom": "*",
     "ext-simplexml": "*",
     "ext-pdo": "*",
-    "xvii/satelles-utilis-proelio": "^1.0@dev"
+    "xvii/satelles-utilis-proelio": "^1.0@dev",
+    "monolog/monolog": "^3.0@dev",
+    "bramus/monolog-colored-line-formatter": "dev-master"
   },
   "require-dev": {
     "swoole/ide-helper": "@dev"

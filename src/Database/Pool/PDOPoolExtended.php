@@ -56,7 +56,7 @@ class PDOPoolExtended extends ConnectionPoolExtended
                 if ($this->config->getPort()) {
                     $host[] = $this->config->getPort();
                 }
-                $dsn = "sqlsrv:Server=" . implode(',', $host) . ";Database=" . $this->config->getDbname();
+                $dsn = "sqlsrv:Server=" . implode(',', $host) . ";TrustServerCertificate=yes;Database=" . $this->config->getDbname();
                 break;
             case 'mysql':
                 if ($this->config->hasUnixSocket()) {
