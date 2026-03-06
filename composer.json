@@ -35,12 +35,12 @@
     "ext-dom": "*",
     "ext-simplexml": "*",
     "ext-pdo": "*",
-    "xvii/satelles-utilis-proelio": "^1.0@dev",
-    "monolog/monolog": "^3.0@dev",
-    "bramus/monolog-colored-line-formatter": "dev-master"
+    "xvii/satelles-utilis-proelio": "^1.0@dev"
   },
   "require-dev": {
-    "swoole/ide-helper": "@dev"
+    "swoole/ide-helper": "@dev",
+    "monolog/monolog": "^3.0@dev",
+    "bramus/monolog-colored-line-formatter": "dev-master"
   },
   "suggest": {
     "ext-sockets": "Sockets extension for TCP/UDP connections",
