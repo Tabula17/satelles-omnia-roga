@@ -138,7 +138,7 @@ class Param implements Paraminterface
     private(set) mixed $groupCondition;
     private(set) ?SelectStatement $subquery;
     private bool $subqueryAsArgument = false;
-
+    private(set) ?string $description;
     /**
      * @throws ConfigException
      */
@@ -155,6 +155,7 @@ class Param implements Paraminterface
             throw new ConfigException(ExceptionDefinitions::PARAM_WITHOUT_NAME->value);
         }
         $this->placeholder = ':' . $this->descriptor['name'];
+        $this->description = $this->descriptor['description'] ?? null;
         $this->sqlexpression = $this->descriptor['sqlexpression'] ?? 'eq';
         $this->needColumnExpression = isset($this->descriptor['usecolexpression']) && (bool)$this->descriptor['usecolexpression'] === true && !isset($this->descriptor['paramName']);
         $this->required = isset($this->descriptor['required']) && (int)$this->descriptor['required'] === 1;
