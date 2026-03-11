@@ -25,4 +25,5 @@ class ConditionDescriptor extends AbstractDescriptor
             }
         }
     }
+    protected(set) ?string $description;
 }
