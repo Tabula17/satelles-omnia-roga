@@ -146,7 +146,7 @@ class HealthManager implements HealthManagerInterface
                     break;
                 }
                 // Guardar en historial
-                $lastCheck = $this->checkHistory[array_key_last($this->checkHistory)] ?? [];
+                $lastCheck = !empty($this->checkHistory) ? $this->checkHistory[array_key_last($this->checkHistory)] : [];
 
                 $retryUnreachable = false;
                 $resetFailures = false;
@@ -157,7 +157,8 @@ class HealthManager implements HealthManagerInterface
                     $resetFailures = $lastCheck['permanent_failures'] > 0 && (time() - 1500) > $this->runningWorkers[$workerId]['last_permanent_check'];
                     if ($resetFailures) {
                         $this->logger?->debug("🏥 [Worker #{$workerId}] Vamos a intentar recuperar {$lastCheck['permanent_failures']} fallos permanentes...");
-                    } else if ($lastCheck['permanent_failures'] > 0) {  $lastCheck = date('Y-m-d H:i:s', $this->runningWorkers[$workerId]['last_permanent_check']);
+                    } else if ($lastCheck['permanent_failures'] > 0) {
+                        $lastCheck = date('Y-m-d H:i:s', $this->runningWorkers[$workerId]['last_permanent_check']);
                         $remaining = $this->runningWorkers[$workerId]['last_permanent_check'] + 1500 - time();
                         $effectiveRemaining = ($this->checkInterval * (int)ceil(($remaining * 1000) / $this->checkInterval)) / 1000;
                         $nextCheck = date('i\' s\'\'', $effectiveRemaining);
