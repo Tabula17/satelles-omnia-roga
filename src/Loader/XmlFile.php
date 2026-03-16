@@ -253,6 +253,7 @@ class XmlFile implements LoaderInterface
                         $checkOrphanPaths = ArrayUtilities::getArrayPathsByKey($descriptor, 'path', []);
                         if (empty($checkOrphanPaths)) {
                             $descriptors[] = new $descriptorClass($descriptor);// $descriptor;
+                            $this->logger?->debug("Statement descriptor created for $name: " . var_export($descriptor, true));
                         }
                     }
                 }
