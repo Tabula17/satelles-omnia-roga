@@ -109,9 +109,19 @@ class StatementCollection extends GenericCollection
     }
     public function getDescriptorsByVersion(string $version = 'latest'): ?self
     {
+        if (!$this->hasVersions() || $this->count() === 1) {
+            return $this->first();
+        }
         return $this->getDescriptorsByMetadata('version', $version);
     }
-
+    public function hasVersions(): bool
+    {
+        return count($this->getMetadataMemberValues('version')) > 1;
+    }
+    public function getVersions(): ?array
+    {
+        return $this->getMetadataMemberValues('version');
+    }
     public function hasVariants(): bool
     {
         return count($this->getMetadataMemberValues(MetadataDescriptor::getVariantMember())) > 1;
@@ -123,7 +133,11 @@ class StatementCollection extends GenericCollection
         }
         return $this->getDescriptorByMetadata(MetadataDescriptor::getVariantMember(), $variant);
     }
-    public function getVariants(): ?self
+    public function getVariants(): ?array
+    {
+        return $this->getMetadataMemberValues(MetadataDescriptor::getVariantMember());
+    }
+    public function getDescriptorsVariants(): ?self
     {
         return $this->getDescriptorsByMetadata(MetadataDescriptor::getVariantMember(), '*');
     }
