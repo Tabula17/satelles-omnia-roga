@@ -100,13 +100,13 @@ class XmlStatements implements LoaderStorageInterface
     /**
      * @throws JsonException|ConfigException|RuntimeException
      */
-    public function getStatementInfo(string $name): array
+    public function getStatementInfo(string $name, bool $forceReload = true): array
     {
-        $loader = $this->getLoader();
+        $loader = $this->getLoader(!$forceReload && $this->cacheManager?->has($name) ?? false);
         $builder = new StatementBuilder(
             statementName: $name,
             loader: $loader,
-            reload: true,
+            reload: $forceReload,
             logger: $this->logger
         );
         $descriptors = [];
@@ -167,8 +167,8 @@ class XmlStatements implements LoaderStorageInterface
             $this->logger?->warning("No cache manager available, skipping cache comparison");
             return false;
         }
-        $loader = $this->getLoader();
         $loaderWithCache = $this->getLoader(true);
+        $loader = $this->getLoader();
         return $loader->getStatementDescriptors($name, true) === $loaderWithCache->getStatementDescriptors($name, false);
     }
 }
