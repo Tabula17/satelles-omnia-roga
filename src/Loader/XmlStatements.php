@@ -106,7 +106,8 @@ class XmlStatements implements LoaderStorageInterface
         $builder = new StatementBuilder(
             statementName: $name,
             loader: $loader,
-            reload: true
+            reload: true,
+            logger: $this->logger
         );
         $descriptors = [];
 

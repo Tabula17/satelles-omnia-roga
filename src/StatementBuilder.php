@@ -41,7 +41,7 @@ class StatementBuilder
      * @return void
      * @throws \JsonException
      */
-    public function __construct(private readonly string $statementName, public LoaderInterface $loader, bool $reload = false/*, private ?LoggerInterface $logger = null*/)
+    public function __construct(private readonly string $statementName, public LoaderInterface $loader, bool $reload = false, private ?LoggerInterface $logger = null)
     {
         $this->collection = $this->loader->getStatementCollection($statementName, $reload);
     }
@@ -84,8 +84,11 @@ class StatementBuilder
      */
     public function loadStatementBy(string $member, mixed $value, string $version = 'latest', ?string $variant = 'default'): self
     {
+        $this->logger?->debug(sprintf('StatementBuilder::loadStatementBy(%s, %s, %s, %s)', $member, $value, $version, $variant));
         //$this->descriptor = $this->collection->getDescriptorsByMetadata($member, $value)->getDescriptorByVersion($version);
         $descriptor = $this->getDescriptorBy($member, $value, $version, $variant);
+
+
         if (isset($descriptor) && $descriptor instanceof Descriptor\StatementDescriptor) {
             $expression = new Expression();
             $statement = null;
