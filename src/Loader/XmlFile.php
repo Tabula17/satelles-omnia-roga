@@ -95,7 +95,7 @@ class XmlFile implements LoaderInterface
     {
         $newList = [];
         foreach ($collection as $key => $value) {
-            $this->logger?->debug("Checking for subquery in $key");
+            //$this->logger?->debug("Checking for subquery in $key");
             if ($parent !== null && $parent !== 'statement') {
                 $keys = explode('.', $parent);
                 if (($k = array_search('statement', $keys)) !== false) {
