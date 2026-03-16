@@ -110,7 +110,7 @@ class StatementCollection extends GenericCollection
     public function getDescriptorsByVersion(string $version = 'latest'): ?self
     {
         if (!$this->hasVersions() || $this->count() === 1) {
-            return $this->first();
+            return $this;
         }
         return $this->getDescriptorsByMetadata('version', $version);
     }
