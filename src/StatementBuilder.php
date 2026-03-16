@@ -65,7 +65,7 @@ class StatementBuilder
     public function getAllDescriptorsInfo(): array
     {
         $info = [];
-        foreach($this->collection as $descriptor) {
+        foreach ($this->collection as $descriptor) {
             $info[] = $descriptor->metadata->toArray();
         }
         return $info;
@@ -89,7 +89,11 @@ class StatementBuilder
         //$this->descriptor = $this->collection->getDescriptorsByMetadata($member, $value)->getDescriptorByVersion($version);
         $descriptor = $this->getDescriptorBy($member, $value, $version, $variant);
 
-
+        $this->logger?->debug(sprintf('Descriptor found: %s', implode(' | ', array_map(
+            fn($key, $value) => "$key: $value",
+            array_keys($descriptor->metadata->toArray()),
+            array_values($descriptor->metadata->toArray())
+        ))));
         if (isset($descriptor) && $descriptor instanceof Descriptor\StatementDescriptor) {
             $expression = new Expression();
             $statement = null;

@@ -96,4 +96,14 @@ class MetadataDescriptor extends AbstractDescriptor
     {
         return self::$variantMember;
     }
+    public function identifyBy(): array
+    {
+        $output = [];
+        foreach (self::$identifiedBy as $item) {
+            if(isset($this->$item)) {
+                $output[$item] = $this->$item;
+            }
+        }
+        return $output;
+    }
 }
