@@ -85,12 +85,13 @@ class StatementBuilder
      */
     public function loadStatementBy(string $member, mixed $value, string $version = 'latest', ?string $variant = 'default'): self
     {
+        $this->descriptor = null;
         $this->logger?->debug(sprintf('StatementBuilder::loadStatementBy(%s, %s, %s, %s)', $member, $value, $version, $variant));
         //$this->descriptor = $this->collection->getDescriptorsByMetadata($member, $value)->getDescriptorByVersion($version);
         $descriptor = $this->getDescriptorBy($member, $value, $version, $variant);
 
         $this->logger?->debug(sprintf('Descriptor found: %s', implode(' | ', array_map(
-            fn($key, $value) => "$key: $value",
+            static fn($key, $value) => "$key: $value",
             array_keys($descriptor->metadata->toArray()),
             array_values($descriptor->metadata->toArray())
         ))));
