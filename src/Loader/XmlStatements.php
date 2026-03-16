@@ -118,10 +118,11 @@ class XmlStatements implements LoaderStorageInterface
             $identifier = array_intersect_key($statementInfo, array_flip(MetadataDescriptor::getIdentifiedBy()));
             $this->logger?->debug("🍄 Processing identifiers --> ".var_export($identifier, true));
             foreach ($identifier as $member => $value) {
-                $desc = $builder->loadStatementBy($member, $value, $statementInfo['version'] ?? null, $statementInfo['variant'] ?? null);
+                $desc = $builder->loadStatementBy($member, $value, $statementInfo['version'] ?? null, $statementInfo[MetadataDescriptor::getVariantMember()] ?? null);
                 $descriptors[] = [
                     'type' => $desc->getStatementType(),
-                    'variantMember' => $member,
+                    'memberIdentifier' => $member,
+                    'memberVariant' => $statementInfo[MetadataDescriptor::getVariantMember()] ?? null,
                     'metadata' => $desc->getMetadata() ?? [],
                     'params' => [
                         'required' => $desc->getRequiredParams(),
