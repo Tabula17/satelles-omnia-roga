@@ -2,6 +2,7 @@
 
 namespace Tabula17\Satelles\Omnia\Roga;
 
+use Psr\Log\LoggerInterface;
 use Tabula17\Satelles\Omnia\Roga\Builder\DeleteStatement;
 use Tabula17\Satelles\Omnia\Roga\Builder\ExecuteStatement;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expression;
