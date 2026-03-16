@@ -14,6 +14,7 @@ use Tabula17\Satelles\Omnia\Roga\StatementBuilder;
 use Tabula17\Satelles\Utilis\Config\TCPServerConfig;
 use Tabula17\Satelles\Utilis\Exception\InvalidArgumentException;
 use Tabula17\Satelles\Utilis\Middleware\TCPmTLSAuthMiddleware;
+use Throwable;
 
 /**
  * Class Server
@@ -168,7 +169,7 @@ class Server extends \Swoole\Server
      * @return void
      * @throws InvalidArgumentException
      */
-    public function init(Server $server, int $workerId): void
+    public function init(self $server, int $workerId): void
     {
         /*foreach ($this->beforeWorkerStart as $callback) {
             $callback($server, $workerId);
@@ -203,7 +204,7 @@ class Server extends \Swoole\Server
      * @return void
      * @throws JsonException
      */
-    private function sendResponse(Server $server, int $fd, array $response): void
+    private function sendResponse(self $server, int $fd, array $response): void
     {
         $server->send($fd, json_encode($response, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_INVALID_UTF8_IGNORE) . "\n");
     }
@@ -217,7 +218,7 @@ class Server extends \Swoole\Server
      * @param array|null $data
      * @return void
      */
-    private function sendError(Server $server, int $fd, string $message, ?array $data = []): void
+    private function sendError(self $server, int $fd, string $message, ?array $data = []): void
     {
         try {
             $this->sendResponse($server, $fd, [
@@ -225,7 +226,7 @@ class Server extends \Swoole\Server
                 'message' => $message,
                 'data' => $data
             ]);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $server->logger?->error($e->getMessage());
         } finally {
             $server->logger?->error($message);
@@ -241,10 +242,9 @@ class Server extends \Swoole\Server
      * @throws ConfigException
      * @throws JsonException
      * @throws ConnectionException
-     * @throws StatementExecutionException
-     * @throws \Throwable
+     * @throws Throwable
      */
-    private function processRequest(Server $server, int $fd, string $data): void
+    private function processRequest(self $server, int $fd, string $data): void
     {
         $request = new RequestDescriptor($data);
         $builder = new StatementBuilder(
@@ -274,7 +274,7 @@ class Server extends \Swoole\Server
             }
             try {
                 $stmt->execute();
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 $this->logger?->error('Error executing statement: ' . $e->getMessage());
                 $server->db_logger?->error($builder->getPrettyStatement(), [
                     'error' => $e->getMessage(),
@@ -344,7 +344,7 @@ class Server extends \Swoole\Server
 
             $server->sendResponse($server, $fd, $response);
 
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $env = [
                 'error' => $e->getMessage(),
                 'connection' => $server->connector->getPoolStats($builder->getMetadataValue('connection')),
@@ -359,7 +359,7 @@ class Server extends \Swoole\Server
             $server->connector->putConnection($conn);
         }
     }
-    public function process(Server $server, int $fd, int $reactorId, string $data): void
+    public function process(self $server, int $fd, int $reactorId, string $data): void
     {
         $server->logger?->debug("Procesado request de $fd en proceso > #$reactorId");
         if ($this->mtlsMiddleware !== null) {
@@ -381,11 +381,11 @@ class Server extends \Swoole\Server
      *
      * @return void
      */
-    private function doProcess(Server $server, int $fd, string $data): void
+    private function doProcess(self $server, int $fd, string $data): void
     {
         try {
             $this->processRequest($server, $fd, $data);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->sendError($server, $fd, $e->getMessage());
         }
     }

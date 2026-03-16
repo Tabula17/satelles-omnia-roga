@@ -5,6 +5,7 @@ namespace Tabula17\Satelles\Omnia\Roga\Loader;
 use Psr\Log\LoggerInterface;
 use Tabula17\Satelles\Omnia\Roga\Collection\StatementCollection;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\Descriptors;
+use Tabula17\Satelles\Omnia\Roga\Descriptor\MetadataDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Exception\ExceptionDefinitions;
 use Tabula17\Satelles\Omnia\Roga\Exception\InvalidArgumentException;
 use Tabula17\Satelles\Omnia\Roga\LoaderInterface;
@@ -199,7 +200,7 @@ class XmlFile implements LoaderInterface
             foreach ($statements as $statement) {
                 $subsDetectedByKey = ArrayUtilities::getArrayPathsByKey($statement, 'subquery');
                 $descriptorClass = Descriptors::fromName($statement['type'] ?? 'select');
-                $variants = array_intersect_key($statement['metadata'], array_flip(StatementCollection::$metadataVariantKeywords));
+                $statementIdentifiers = array_intersect_key($statement['metadata'], array_flip(MetadataDescriptor::getIdentifiedBy()));
                 $subqueriesForPath = [];
                 if (!empty($subsDetectedByKey)) {
                     foreach ($subsDetectedByKey as $subqueryPath) {
@@ -215,12 +216,12 @@ class XmlFile implements LoaderInterface
                     }
                 }
 
-                foreach ($variants as $member => $variant) {
-                    $this->logger?->debug("Processing variant $member " . var_export($variant, true));
-                    if (!is_array($variant)) {
-                        $variant = [$variant];
+                foreach ($statementIdentifiers as $member => $identifier) {
+                    $this->logger?->debug("Processing statements identified by $member " . var_export($identifier, true));
+                    if (!is_array($identifier)) {
+                        $identifier = [$identifier];
                     }
-                    foreach ($variant as $allowed) {
+                    foreach ($identifier as $allowed) {
                         $descriptor = $statement;
                         ArrayUtilities::setArrayValueByPath($descriptor, 'metadata.' . $member, $allowed);
 

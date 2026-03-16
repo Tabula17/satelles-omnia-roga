@@ -46,10 +46,11 @@ class StatementBuilder
         $this->collection = $this->loader->getStatementCollection($statementName, $reload);
     }
 
-    public function getDescriptorBy(string $member, mixed $value): ?Descriptor\StatementDescriptor
+    public function getDescriptorBy(string $member, mixed $value, string $version = 'latest', ?string $variant = 'default'): ?Descriptor\StatementDescriptor
     {
         if (!isset($this->descriptor)) {
-            $this->descriptor = $this->collection->getDescriptorByMetadata($member, $value);
+            $descriptors = $this->collection->getDescriptorsByMetadata($member, $value)->getDescriptorsByVersion($version);
+            $this->descriptor = $descriptors->getVariant($variant);
         }
         return $this->descriptor;
     }
@@ -71,61 +72,64 @@ class StatementBuilder
      * @throws ConfigException
      * @throws RuntimeException
      */
-    public function loadStatementBy(string $member, mixed $value): self
+    public function loadStatementBy(string $member, mixed $value, string $version = 'latest', ?string $variant = 'default'): self
     {
-        $this->descriptor = $this->collection->getDescriptorByMetadata($member, $value);
-        $expression = new Expression();
-        $statement = null;
-        if ($this->descriptor instanceof SelectDescriptor) {
-            $statement = new SelectStatement(
-                selectParts: $this->descriptor,
-                expression: $expression,
-                prettyPrint: false,
-                prettyPrintDeep: false
-            );
+        //$this->descriptor = $this->collection->getDescriptorsByMetadata($member, $value)->getDescriptorByVersion($version);
+        $descriptor = $this->getDescriptorBy($member, $value, $version, $variant);
+        if (isset($descriptor) && $descriptor instanceof Descriptor\StatementDescriptor) {
+            $expression = new Expression();
+            $statement = null;
+            if ($descriptor instanceof SelectDescriptor) {
+                $statement = new SelectStatement(
+                    selectParts: $descriptor,
+                    expression: $expression,
+                    prettyPrint: false,
+                    prettyPrintDeep: false
+                );
+            }
+            if ($descriptor instanceof UnionDescriptor) {
+                $statement = new UnionStatement(
+                    statementParts: $descriptor,
+                    expression: $expression,
+                    prettyPrint: false,
+                    prettyPrintDeep: false
+                );
+            }
+            if ($descriptor instanceof InsertDescriptor) {
+                $statement = new InsertStatement(
+                    statementParts: $descriptor,
+                    expression: $expression,
+                    prettyPrint: false,
+                    prettyPrintDeep: false
+                );
+            }
+            if ($descriptor instanceof UpdateDescriptor) {
+                $statement = new UpdateStatement(
+                    statementParts: $descriptor,
+                    expression: $expression,
+                    prettyPrint: false,
+                    prettyPrintDeep: false
+                );
+            }
+            if ($descriptor instanceof DeleteDescriptor) {
+                $statement = new DeleteStatement(
+                    statementParts: $descriptor,
+                    expression: $expression,
+                    prettyPrint: false,
+                    prettyPrintDeep: false
+                );
+            }
+            if ($descriptor instanceof ExecuteDescriptor) {
+                $statement = new ExecuteStatement(
+                    statementParts: $descriptor,
+                    expression: $expression,
+                );
+            }
+            if (!isset($statement)) {
+                throw new RuntimeException(sprintf(ExceptionDefinitions::STATEMENT_NOT_FOUND_FOR_VARIANT->value, $value, $this->statementName ?? ''));
+            }
+            $this->processor = $statement;
         }
-        if ($this->descriptor instanceof UnionDescriptor) {
-            $statement = new UnionStatement(
-                statementParts: $this->descriptor,
-                expression: $expression,
-                prettyPrint: false,
-                prettyPrintDeep: false
-            );
-        }
-        if ($this->descriptor instanceof InsertDescriptor) {
-            $statement = new InsertStatement(
-                statementParts: $this->descriptor,
-                expression: $expression,
-                prettyPrint: false,
-                prettyPrintDeep: false
-            );
-        }
-        if ($this->descriptor instanceof UpdateDescriptor) {
-            $statement = new UpdateStatement(
-                statementParts: $this->descriptor,
-                expression: $expression,
-                prettyPrint: false,
-                prettyPrintDeep: false
-            );
-        }
-        if ($this->descriptor instanceof DeleteDescriptor) {
-            $statement = new DeleteStatement(
-                statementParts: $this->descriptor,
-                expression: $expression,
-                prettyPrint: false,
-                prettyPrintDeep: false
-            );
-        }
-        if ($this->descriptor instanceof ExecuteDescriptor) {
-            $statement = new ExecuteStatement(
-                statementParts: $this->descriptor,
-                expression: $expression,
-            );
-        }
-        if (!isset($statement)) {
-            throw new RuntimeException(sprintf(ExceptionDefinitions::STATEMENT_NOT_FOUND_FOR_VARIANT->value, $value, $this->statementName ?? ''));
-        }
-        $this->processor = $statement;
         return $this;
     }
 
@@ -198,6 +202,7 @@ class StatementBuilder
         }
         return null;
     }
+
     public function removeValue(string $placeholder): void
     {
         $this->processor?->removeValue($placeholder);

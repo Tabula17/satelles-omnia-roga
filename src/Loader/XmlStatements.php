@@ -2,11 +2,13 @@
 
 namespace Tabula17\Satelles\Omnia\Roga\Loader;
 
+use JsonException;
 use Psr\Log\LoggerInterface;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RegexIterator;
 use Tabula17\Satelles\Omnia\Roga\Collection\StatementCollection;
+use Tabula17\Satelles\Omnia\Roga\Descriptor\MetadataDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
 use Tabula17\Satelles\Omnia\Roga\Exception\ExceptionDefinitions;
 use Tabula17\Satelles\Omnia\Roga\Exception\InvalidArgumentException;
@@ -14,6 +16,7 @@ use Tabula17\Satelles\Omnia\Roga\LoaderInterface;
 use Tabula17\Satelles\Omnia\Roga\LoaderStorageInterface;
 use Tabula17\Satelles\Omnia\Roga\StatementBuilder;
 use Tabula17\Satelles\Utilis\Cache\CacheManagerInterface;
+use Tabula17\Satelles\Utilis\Exception\RuntimeException;
 
 /**
  * Class XmlStatements
@@ -24,6 +27,9 @@ use Tabula17\Satelles\Utilis\Cache\CacheManagerInterface;
 class XmlStatements implements LoaderStorageInterface
 {
     private(set) string $baseDir {
+        /**
+         * @throws InvalidArgumentException
+         */
         set {
             if (!realpath($value) || !is_dir($value)) {
                 throw new InvalidArgumentException(sprintf(ExceptionDefinitions::DIRECTORY_NOT_FOUND->value, $value));
@@ -92,7 +98,7 @@ class XmlStatements implements LoaderStorageInterface
     }
 
     /**
-     * @throws \JsonException|ConfigException
+     * @throws JsonException|ConfigException|RuntimeException
      */
     public function getStatementInfo(string $name): array
     {
@@ -103,18 +109,18 @@ class XmlStatements implements LoaderStorageInterface
             reload: true
         );
         $descriptors = [];
-        foreach (StatementCollection::$metadataVariantKeywords as $variant) {
+        foreach (MetadataDescriptor::getIdentifiedBy() as $statementIdentifier) {
             $collection = $loader->getStatementCollection($name, true);
-            $this->logger?->debug("🍄 Processing variant --> ".var_export($variant, true));
-            $variants = $collection?->availableVariantsByMetadata($variant);//todo: check if this is correct, sometimes $variant is array??
+            $this->logger?->debug("🍄 Processing variant --> ".var_export($statementIdentifier, true));
+            $variants = $collection?->getMetadataMemberValues($statementIdentifier);//todo: check if this is correct, sometimes $variant is array??
             foreach ($variants as $variantValue) {
-                $this->logger?->debug("Processing variant $variant " . var_export($variantValue, true));
+                $this->logger?->debug("Processing variant $statementIdentifier " . var_export($variantValue, true));
                 //foreach ($variantValue as $value) {
-                $desc = $builder->loadStatementBy($variant, $variantValue);
+                $desc = $builder->loadStatementBy($statementIdentifier, $variantValue);
                 if ($desc instanceof StatementBuilder) {
                     $descriptors[] = [
                         'type' => (string)$desc->getStatementType(),
-                        'variantMember' => $variant,
+                        'variantMember' => $statementIdentifier,
                         'metadata' => $desc->getMetadata() ?? [],
                         'params' => [
                             'required' => $desc->getRequiredParams(),

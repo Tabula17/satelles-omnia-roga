@@ -2,6 +2,7 @@
 
 namespace Tabula17\Satelles\Omnia\Roga\Collection;
 
+use Tabula17\Satelles\Omnia\Roga\Descriptor\MetadataDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\StatementDescriptor;
 use Tabula17\Satelles\Utilis\Collection\GenericCollection;
 
@@ -12,9 +13,9 @@ class StatementCollection extends GenericCollection
      * Unused or commented keywords are provided for reference or future use.
      */
     public static array $metadataVariantKeywords = [
-        'client',
+        //'client',
         //'clients',
-        'variant',
+        //'variant',
         //'variants',
         'allowed'
     ];
@@ -52,9 +53,8 @@ class StatementCollection extends GenericCollection
             }
             return $descriptor->metadata->{$member} === '*' ||
                 (
-                    ($valIsInt ? (int)$descriptor->metadata->{$member} :
-                        $descriptor->metadata->{$member}) === $value
-                );
+                    ($valIsInt ? (int)$descriptor->metadata->{$member} : $descriptor->metadata->{$member}) === $value
+                ) || $descriptor->metadata->{$member} === $value;
         });
     }
 
@@ -66,11 +66,65 @@ class StatementCollection extends GenericCollection
      */
     public function availableVariantsByMetadata(string $member): array
     {
-        return array_filter(array_unique(array_map(static function ($descriptor) use ($member) {//todo:review when setting $member, sometimes goes as array
-            if(is_string($member) && $descriptor->metadata->offsetExists($member)) {
+        return $this->getMetadataMemberValues($member);
+    }
+
+    public function getMetadataMemberValues(string $member): array
+    {
+        return array_filter(array_unique(array_map(static function ($descriptor) use ($member) {
+            if (is_string($member) && $descriptor->metadata->offsetExists($member)) {
                 return $descriptor->metadata->{$member};
             }
             return null;
         }, $this->values)));
+    }
+
+    public function getDescriptorsByMetadata(string $member, mixed $value): ?self
+    {
+        $descriptors = array_filter($this->values, static function ($descriptor) use ($member, $value) {
+            return $descriptor->metadata->{$member} === $value;
+        });
+        if (empty($descriptors)) {
+            return null;
+        }
+        return new self(...$descriptors);
+    }
+
+    public function getDescriptorByVersion(string $version = 'latest'): ?StatementDescriptor
+    {
+        if ($version === 'latest') {
+            if ($this->count() === 1) {
+                return $this->first();
+            }
+            foreach ($this->getMetadataMemberValues('version') as $value) {
+                if ($version === 'latest' || version_compare($value, $version) === 1) {
+                    $version = $value;
+                }
+            }
+        }
+
+        return array_find($this->values, static function ($descriptor) use ($version) {
+            return $descriptor->version === $version;
+        });
+    }
+    public function getDescriptorsByVersion(string $version = 'latest'): ?self
+    {
+        return $this->getDescriptorsByMetadata('version', $version);
+    }
+
+    public function hasVariants(): bool
+    {
+        return count($this->getMetadataMemberValues(MetadataDescriptor::getVariantMember())) > 1;
+    }
+    public function getVariant(string $variant = 'default'): ?StatementDescriptor
+    {
+        if (!$this->hasVariants() || $this->count() === 1) {
+            return $this->first();
+        }
+        return $this->getDescriptorByMetadata(MetadataDescriptor::getVariantMember(), $variant);
+    }
+    public function getVariants(): ?self
+    {
+        return $this->getDescriptorsByMetadata(MetadataDescriptor::getVariantMember(), '*');
     }
 }

@@ -8,10 +8,11 @@ use Tabula17\Satelles\Utilis\Config\AbstractDescriptor;
 class RequestDescriptor extends AbstractDescriptor
 {
     protected(set) ?string $cfg;
-    protected(set) int|string $variant;
-    protected(set) int|string $allowed;
-    protected(set) int|string $client;
+    protected(set) string $variant;
+    protected(set) int|float|string $allowed;
+    protected(set) int|float|string $client;
     protected(set) array $params = [];
+    protected(set) ?string $version;
     protected(set) ?bool $forceReload = false;
 
     /**
@@ -27,16 +28,16 @@ class RequestDescriptor extends AbstractDescriptor
 
     public function getFor(): array
     {
-        if (isset($this->variant)) {
-            return ['variant', $this->variant];
+        if (!isset($this->cfg) || (!isset($this->allowed) && !isset($this->client))) {
+            return [];
         }
-        if (isset($this->allowed)) {
-            return ['allowed', $this->allowed];
-        }
-        if (isset($this->client)) {
-            return ['client', $this->client];
-        }
-        return [];
+        // match arguments StatementBuilder::loadStatementBy(string $member, mixed $value, string $version = 'latest', ?string $variant = 'default'): self
+        return [
+            'member' => isset($this->allowed) ? 'allowed' : 'client',
+            'value' => $this->allowed ?? $this->client,
+            'version' => $this->version ?? 'latest',
+            'variant' => $this->variant ?? 'default'
+        ];
     }
 
 }
