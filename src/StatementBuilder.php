@@ -66,7 +66,7 @@ class StatementBuilder
     {
         $info = [];
         foreach ($this->collection as $descriptor) {
-            $info[] = $descriptor->metadata->toArray();
+            $info[] = array_filter($descriptor->metadata->toArray());
         }
         return $info;
     }
