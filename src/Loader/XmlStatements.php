@@ -109,27 +109,28 @@ class XmlStatements implements LoaderStorageInterface
             reload: true
         );
         $descriptors = [];
+
+        $this->logger?->debug("Getting statement info for $name -> ". var_export($builder->getAllDescriptorsInfo(), true));
+
+
         foreach (MetadataDescriptor::getIdentifiedBy() as $statementIdentifier) {
             $collection = $loader->getStatementCollection($name, true);
             $this->logger?->debug("🍄 Processing variant --> ".var_export($statementIdentifier, true));
-            $variants = $collection?->getMetadataMemberValues($statementIdentifier);//todo: check if this is correct, sometimes $variant is array??
-            foreach ($variants as $variantValue) {
-                $this->logger?->debug("Processing variant $statementIdentifier " . var_export($variantValue, true));
-                //foreach ($variantValue as $value) {
-                $desc = $builder->loadStatementBy($statementIdentifier, $variantValue);
-                if ($desc instanceof StatementBuilder) {
-                    $descriptors[] = [
-                        'type' => (string)$desc->getStatementType(),
-                        'variantMember' => $statementIdentifier,
-                        'metadata' => $desc->getMetadata() ?? [],
-                        'params' => [
-                            'required' => $desc->getRequiredParams(),
-                            'optional' => $desc->getOptionalParams()
-                        ],
+            $statementsValues = $collection?->getMetadataMemberValues($statementIdentifier);//todo: check if this is correct, sometimes $variant is array??
+            foreach ($statementsValues as $statementValue) {
+                $this->logger?->debug("Processing variant $statementIdentifier " . var_export($statementValue, true));
 
-                    ];
-                }
-                //}
+                //foreach ($variantValue as $value) {
+                $desc = $builder->loadStatementBy($statementIdentifier, $statementValue);
+                $descriptors[] = [
+                    'type' => $desc->getStatementType(),
+                    'variantMember' => $statementIdentifier,
+                    'metadata' => $desc->getMetadata() ?? [],
+                    'params' => [
+                        'required' => $desc->getRequiredParams(),
+                        'optional' => $desc->getOptionalParams()
+                    ],
+                ];
             }
 
         }

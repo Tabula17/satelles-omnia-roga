@@ -48,6 +48,7 @@ class StatementBuilder
 
     public function getDescriptorBy(string $member, mixed $value, string $version = 'latest', ?string $variant = 'default'): ?Descriptor\StatementDescriptor
     {
+
         if (!isset($this->descriptor)) {
             $descriptors = $this->collection->getDescriptorsByMetadata($member, $value)->getDescriptorsByVersion($version);
             $this->descriptor = $descriptors->getVariant($variant);
@@ -58,6 +59,15 @@ class StatementBuilder
     public function getAllDescriptors(): array
     {
         return $this->collection->toArray();
+    }
+
+    public function getAllDescriptorsInfo(): array
+    {
+        $info = [];
+        foreach($this->collection as $descriptor) {
+            $info[] = $descriptor->metadata->toArray();
+        }
+        return $info;
     }
 
     /**
