@@ -144,7 +144,7 @@ class Connector
 
     public function fetchUnreachableConnections(): DbConfigCollection
     {
-        $connections = clone $this->unreachableConnections;
+        $connections = DbConfigCollection::fromArray($this->unreachableConnections->toArray());//clone $this->unreachableConnections;
         // LIMPIA ANTES de reintentar (evita bucle infinito)
         $this->unreachableConnections->clear();
         return $connections;
