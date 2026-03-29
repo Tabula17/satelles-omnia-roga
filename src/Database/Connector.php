@@ -144,7 +144,7 @@ class Connector
 
     public function fetchUnreachableConnections(): DbConfigCollection
     {
-        $connections = DbConfigCollection::fromArray($this->unreachableConnections->toArray());//clone $this->unreachableConnections;
+        $connections = $this->unreachableConnections::fromArray($this->unreachableConnections->toArray());//clone $this->unreachableConnections;
         // LIMPIA ANTES de reintentar (evita bucle infinito)
         $this->unreachableConnections->clear();
         return $connections;
@@ -176,7 +176,7 @@ class Connector
 
     public function fetchPermanentlyFailedConnections(): DbConfigCollection
     {
-        $connections = clone $this->permanentlyFailedConnections;
+        $connections = $this->permanentlyFailedConnections::fromArray($this->permanentlyFailedConnections->toArray());//clone $this->permanentlyFailedConnections;
         $this->permanentlyFailedConnections->clear();
         foreach ($connections as $config) {
             $config->unsetMetadataProperty('retry_count');
