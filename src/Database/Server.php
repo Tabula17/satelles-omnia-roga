@@ -21,7 +21,7 @@ use Throwable;
  *
  * Extends the Swoole\Server class to implement a custom TCP server with support for
  * connection pools, database configurations, and specific request processing.
-* It includes methods for handling server initialization, request processing, and
+ * It includes methods for handling server initialization, request processing, and
  * response handling, with logging and error management capabilities.
  */
 class Server extends \Swoole\Server
@@ -82,6 +82,7 @@ class Server extends \Swoole\Server
         return parent::on($event_name, $callbackWrapper);
         //return parent::on($event_name, $callback);
     }
+
     public function off(string $event_name, callable $callback): bool
     {
         if (in_array($event_name, $this->privateEvents, true)) {
@@ -100,6 +101,7 @@ class Server extends \Swoole\Server
         return parent::on($event_name, static fn() => false);
 
     }
+
     private function onEventHook(string $event_name, callable $callback, string $when = 'after'): bool
     {
         $prop = $when . ucfirst($event_name);
@@ -112,6 +114,7 @@ class Server extends \Swoole\Server
         }
         return false;
     }
+
     private function offEventHook(string $event_name, callable $callback, string $when = 'after'): bool
     {
         $prop = $when . ucfirst($event_name);
@@ -121,6 +124,7 @@ class Server extends \Swoole\Server
         }
         return false;
     }
+
     private function runEventsAction(string $event_name, ?array $args = [], string $when = 'after'): void
     {
         $prop = $when . ucfirst($event_name);
@@ -130,22 +134,27 @@ class Server extends \Swoole\Server
             }
         }
     }
+
     public function onAfter(string $event_name, callable $callback): bool
     {
         return $this->onEventHook($event_name, $callback, 'after');
     }
+
     public function offAfter(string $event_name, callable $callback): bool
     {
         return $this->offEventHook($event_name, $callback, 'after');
     }
+
     public function onBefore(string $event_name, callable $callback): bool
     {
         return $this->onEventHook($event_name, $callback, 'before');
     }
+
     public function offBefore(string $event_name, callable $callback): bool
     {
         return $this->offEventHook($event_name, $callback, 'before');
     }
+
     private function onPrivateEvent(string $event_name, callable $callback): bool
     {
         $callbackWrapper = function (...$args) use ($callback, $event_name) {
@@ -232,6 +241,7 @@ class Server extends \Swoole\Server
             $server->logger?->error($message);
         }
     }
+
     /**
      * Processes an incoming request, builds and executes a database statement
      * based on the provided data, and sends a response back with the results.
@@ -239,29 +249,41 @@ class Server extends \Swoole\Server
      * @param int $fd The file descriptor representing the incoming client connection.
      * @param string $data The raw data received from the client, expected to be in a specific format.
      * @return void This method does not return a value but sends a response back to the client.
-     * @throws ConfigException
-     * @throws JsonException
+     *
      * @throws ConnectionException
-     * @throws Throwable
      */
     private function processRequest(self $server, int $fd, string $data): void
     {
-        $request = new RequestDescriptor($data);
-        $builder = new StatementBuilder(
-            statementName: $request->cfg,
-            loader: $server->loader,
-            reload: $request->forceReload
-        );
-        $identifier = $request->getFor();
-        $server->logger?->debug('Buscando statement para ' . implode(': ', $identifier));
-        $builder->loadStatementBy(...$identifier)?->setValues($request->params ?? []);
-        $descriptor = $builder->getDescriptorBy(...$identifier);
-        if ($descriptor === null) {
-            throw new \InvalidArgumentException(sprintf(ExceptionDefinitions::STATEMENT_NOT_FOUND_FOR_VARIANT->value, implode(': ', $identifier), $request->cfg ?? ''));
+        try {
+            $request = new RequestDescriptor($data);
+            if (!$request->isValid()) {
+                $server->logger?->error("Invalid request format: " . $data);
+                throw new InvalidArgumentException("Invalid request format");
+            }
+            $builder = new StatementBuilder(
+                statementName: $request->cfg,
+                loader: $server->loader,
+                reload: $request->forceReload
+            );
+            $identifier = $request->getFor();
+            $server->logger?->debug('Buscando statement para ' . implode(': ', $identifier));
+            $builder->loadStatementBy(...$identifier)?->setValues($request->params ?? []);
+            $descriptor = $builder->getDescriptorBy(...$identifier);
+            if ($descriptor === null) {
+                throw new \InvalidArgumentException(sprintf(ExceptionDefinitions::STATEMENT_NOT_FOUND_FOR_VARIANT->value, implode(': ', $identifier), $request->cfg ?? ''));
+            }
+            $server->logger?->debug('Buscando conexión para ' . $builder->getMetadataValue('connection'));
+            /** @var PDO $conn */
+            $conn = $server->connector->getConnection($builder->getMetadataValue('connection'));
+        } catch (Throwable $e) {
+            $server->logger?->error('Error processing request: ' . $e->getMessage(), ['request' => $data]);
+            if (isset($conn)) {
+                $server->connector->putConnection($conn);
+            }
+            $this->sendError($server, $fd, $e->getMessage());
+
+            return;
         }
-        $server->logger?->debug('Buscando conexión para ' . $builder->getMetadataValue('connection'));
-        /** @var PDO $conn */
-        $conn = $server->connector->getConnection($builder->getMetadataValue('connection'));
         if (!isset($conn)) {
             throw new ConnectionException(sprintf(ExceptionDefinitions::POOL_NOT_FOUND->value, $builder->getMetadataValue('connection')), 500);
         }
@@ -359,6 +381,7 @@ class Server extends \Swoole\Server
             $server->connector->putConnection($conn);
         }
     }
+
     public function process(self $server, int $fd, int $reactorId, string $data): void
     {
         $server->logger?->debug("Procesado request de $fd en proceso > #$reactorId");
@@ -371,6 +394,7 @@ class Server extends \Swoole\Server
             $this->doProcess($server, $fd, $data);
         }
     }
+
     /**
      * Processes a request received from the server, delegating it to the appropriate handler
      * and managing errors if any exception occurs.

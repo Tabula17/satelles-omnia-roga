@@ -8,11 +8,11 @@ use Tabula17\Satelles\Utilis\Config\AbstractDescriptor;
 class RequestDescriptor extends AbstractDescriptor
 {
     protected(set) ?string $cfg;
-    protected(set) string $variant;
+    protected(set) string $variant = 'default';
     protected(set) int|float|string $allowed;
     protected(set) int|float|string $client;
     protected(set) array $params = [];
-    protected(set) ?string $version;
+    protected(set) ?string $version = 'latest';
     protected(set) ?bool $forceReload = false;
 
     /**
@@ -28,7 +28,7 @@ class RequestDescriptor extends AbstractDescriptor
 
     public function getFor(): array
     {
-        if (!isset($this->cfg) || (!isset($this->allowed) && !isset($this->client))) {
+        if (!$this->isValid()) {
             return [];
         }
         // match arguments StatementBuilder::loadStatementBy(string $member, mixed $value, string $version = 'latest', ?string $variant = 'default'): self
@@ -40,4 +40,14 @@ class RequestDescriptor extends AbstractDescriptor
         ];
     }
 
+    /**
+     * Checks if the current object is valid based on its properties and conditions.
+     *
+     * @return bool Returns true if the required properties are set and the identifier condition is met, otherwise false.
+     */
+    public function isValid(): bool
+    {
+        $identifier = ($this->allowed || $this->client);
+        return isset($this->cfg, $this->variant, $identifier, $this->version);
+    }
 }
