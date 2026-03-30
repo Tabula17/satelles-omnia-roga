@@ -26,7 +26,7 @@ class DbConfigCollection extends ConnectionCollection
     /**
      * @throws InvalidArgumentException
      */
-    public function filterByDriver(string $driver): self
+    public function filterByDriver(string $driver): static
     {
         return $this->filterBy('driver', DriversEnum::fromName($driver));
     }
@@ -36,14 +36,14 @@ class DbConfigCollection extends ConnectionCollection
         return $this->find(fn(DbConfig $config) => $config->$key === $value);
     }
 
-    public function filterBy(string $key, mixed $value): self
+    public function filterBy(string $key, mixed $value): static
     {
         return $this->filter(fn(DbConfig $config) => $config->$key === $value);
     }
 
-    public static function fromArray(array $config, ?string $type = null): self
+    public static function fromArray(array $config, ?string $type = null): static
     {
-        return new self(...array_map(static fn($item) => $item instanceof self::$type ? $item : new self::$type($item), $config));
+        return new static(...array_map(static fn($item) => $item instanceof static::$type ? $item : new static::$type($item), $config));
     }
 
     public function collect(string $key): array

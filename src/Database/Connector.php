@@ -18,7 +18,7 @@ use Throwable;
  * Manages a collection of database connection pools, allowing for creating,
  * retrieving, and removing connection pools and individual connections.
  */
-class Connector
+class Connector implements ConnectorInterface
 {
     use CoroutineHelper;
 
