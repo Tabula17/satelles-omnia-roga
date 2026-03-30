@@ -10,9 +10,9 @@ class DbConfigCollection extends ConnectionCollection
 {
     public static string $type = DbConfig::class;
 
-    public function __construct(DbConfig ...$config)
+    protected static function getType(): string
     {
-        parent::__construct(...$config);
+        return static::$type;
     }
 
     /**
