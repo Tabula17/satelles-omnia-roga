@@ -13,7 +13,7 @@ This is a library package intended to be used from your PHP application. An exam
 - Select a variant of a statement by metadata (e.g., `allowed`, `client`, `variant`).
 - Build and pretty-print SQL; inspect required/optional parameters and final bindings.
 - Optional caching of parsed XML using Redis or Memcached (via `xvii/satelles-utilis-proelio`).
-- Swoole\Server derived class for building and executing SQL statements on the fly in a multithreaded environment.
+- ~~Swoole\Server derived class for building and executing SQL statements on the fly in a multithreaded environment.~~ DEPRECATED: use `xvii/satelles-nexus-utilis` instead.
 
 #### Tech stack
 
@@ -61,7 +61,7 @@ Key paths in this repo:
   - `Descriptor/` — descriptor classes representing parsed XML statements
   - `Loader/` — loaders, e.g., `Loader\XmlFile`
   - `Loader/Xml/` — example XML statement descriptors grouped by operation
-  - `Database/` — enums and connection/pool collections
+  - ~~`Database/` — enums and connection/pool collections~~ DEPRECATED: use `xvii/satelles-nexus-utilis` instead
   - `Collection/`, `Exception/` — internal collections and exceptions
 - `tests/` — lightweight test script(s)
 - `vendor/` — Composer dependencies
