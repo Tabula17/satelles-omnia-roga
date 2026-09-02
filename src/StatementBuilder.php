@@ -51,8 +51,8 @@ class StatementBuilder
     {
 
         if (!isset($this->descriptor)) {
-            $descriptors = $this->collection->getDescriptorsByMetadata($member, $value)->getDescriptorsByVersion($version);
-            $this->descriptor = $descriptors->getVariant($variant);
+            $this->logger?->debug(sprintf($this->statementName.': StatementBuilder::getDescriptorBy(%s, %s, %s, %s)', $member, $value, $version, $variant));
+            $this->descriptor = $this->collection->getDescriptorsByMetadata($member, $value)?->getDescriptorsByVersion($version)?->getVariant($variant);
         }
         return $this->descriptor;
     }
@@ -92,8 +92,8 @@ class StatementBuilder
 
         $this->logger?->debug(sprintf('Descriptor found: %s', implode(' | ', array_map(
             static fn($key, $value) => "$key: $value",
-            array_keys($descriptor->metadata->toArray()),
-            array_values($descriptor->metadata->toArray())
+            array_keys($descriptor?->metadata->toArray() ?? []),
+            array_values($descriptor?->metadata->toArray() ?? [])
         ))));
         if (isset($descriptor) && $descriptor instanceof Descriptor\StatementDescriptor) {
             $expression = new Expression();

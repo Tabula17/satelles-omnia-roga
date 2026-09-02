@@ -9,6 +9,8 @@ use Tabula17\Satelles\Utilis\Cache\RedisStorage;
 use Tabula17\Satelles\Utilis\Config\RedisConfig;
 
 include_once 'vendor/autoload.php';
+$logger = new Monolog\Logger('roga-db-cache');
+$logger->pushHandler(new Monolog\Handler\StreamHandler('php://stdout', Monolog\Logger::DEBUG));
 $start = microtime(true);
 /**
  * Creates a string consisting of a repeated character with an optional newline at the end.
@@ -31,13 +33,13 @@ try {
 // $cacheManager = new MemcachedStorage('roga-db-cache', ['127.0.0.1:11211']);
     $cacheManager = new RedisStorage($redisConfig);
 
-    $loader = new XmlFile(baseDir: __DIR__ . DIRECTORY_SEPARATOR . 'Xml', cacheManager: $cacheManager);
+    $loader = new XmlFile(baseDir: __DIR__ . DIRECTORY_SEPARATOR . 'Xml', cacheManager: $cacheManager, logger: $logger);
 
 //$xml = 'SELECT/Complex';
 //$xml = 'SELECT/Basic';
 //$xml = 'SELECT/Union';
-//$xml = 'EXEC/SPSqlServer';
-$xml = 'EXEC/Expedicion';
+$xml = 'EXEC/SPSqlServer';
+//$xml = 'EXEC/Expedicion';
 //$xml = 'INSERT/Basic';
 //$xml = 'INSERT/FromSelect';
     $member = 'allowed';
@@ -63,7 +65,8 @@ $xml = 'EXEC/Expedicion';
     $builder = new StatementBuilder(
         statementName: $xml,
         loader: $loader,
-        reload: false
+        reload: false,
+        logger: $logger
     );
     /*
      *     $statement->setValue(':param_1', true);

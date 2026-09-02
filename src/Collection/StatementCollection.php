@@ -82,7 +82,9 @@ class StatementCollection extends GenericCollection
     public function getDescriptorsByMetadata(string $member, mixed $value): ?self
     {
         $descriptors = array_filter($this->values, static function ($descriptor) use ($member, $value) {
-            return $descriptor->metadata->{$member} === $value;
+            echo sprintf("Checking descriptor: %s, member: %s, value: %s\n", json_encode($descriptor->metadata->toArray()), $member, $value);
+            echo sprintf("Descriptor isValid: %s = %s\n", $descriptor->metadata->{$member}, $value);
+            return $descriptor->metadata->{$member} === (string)$value || $descriptor->metadata->{$member} === '*';
         });
         if (empty($descriptors)) {
             return null;
