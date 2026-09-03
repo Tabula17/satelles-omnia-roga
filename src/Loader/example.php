@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Bramus\Monolog\Formatter\ColoredLineFormatter;
 use Tabula17\Satelles\Omnia\Roga\Loader\XmlFile;
 use Tabula17\Satelles\Omnia\Roga\StatementBuilder;
 use Tabula17\Satelles\Utilis\Cache\MemcachedStorage;
@@ -9,21 +10,11 @@ use Tabula17\Satelles\Utilis\Cache\RedisStorage;
 use Tabula17\Satelles\Utilis\Config\RedisConfig;
 
 include_once 'vendor/autoload.php';
-$logger = new Monolog\Logger('roga-db-cache');
-$logger->pushHandler(new Monolog\Handler\StreamHandler('php://stdout', Monolog\Logger::DEBUG));
+$logger = new Monolog\Logger('roga-db-xml');
+$handler = new Monolog\Handler\StreamHandler('php://stdout', Monolog\Logger::DEBUG);
+$handler->setFormatter(new ColoredLineFormatter());
+$logger->pushHandler($handler);
 $start = microtime(true);
-/**
- * Creates a string consisting of a repeated character with an optional newline at the end.
- *
- * @param string $char The character to repeat. Default is '-'.
- * @param int $length The number of times to repeat the character. Default is 100.
- * @param bool $eol Whether to append a newline at the end. Default is true.
- * @return string The generated string.
- */
-$separator = static function (string $char = '-', int $length = 100, bool $eol = true): string {
-    return str_repeat($char, $length) . ($eol ? PHP_EOL : '');
-};
-
 $redisConfig = new RedisConfig([
     'host' => '127.0.0.1',
     'port' => 6379,
@@ -35,10 +26,10 @@ try {
 
     $loader = new XmlFile(baseDir: __DIR__ . DIRECTORY_SEPARATOR . 'Xml', cacheManager: $cacheManager, logger: $logger);
 
-//$xml = 'SELECT/Complex';
+    $xml = 'SELECT/Complex';
 //$xml = 'SELECT/Basic';
 //$xml = 'SELECT/Union';
-$xml = 'EXEC/SPSqlServer';
+//$xml = 'EXEC/SPSqlServer';
 //$xml = 'EXEC/Expedicion';
 //$xml = 'INSERT/Basic';
 //$xml = 'INSERT/FromSelect';
@@ -78,51 +69,38 @@ $xml = 'EXEC/SPSqlServer';
         $statement->setValue(':param_exists', 397);
         $statement->setValue(':x_param_not_exists', 397);
      */
-    $div = $separator('=');
-    $subdiv = $separator();
-
-    echo PHP_EOL, PHP_EOL, '   XML: ', $xml, PHP_EOL, '    SEARCH FOR ', implode(',', $memberValues), PHP_EOL, PHP_EOL;
-    echo $div;
+    $logger->debug('XML LOADED, SEARCH FOR ' . implode(',', $memberValues));
 } catch (\Throwable $e) {
-    echo $e->getMessage(), PHP_EOL;
+    $logger->error($e->getMessage(), ['trace' => $e->getTraceAsString()]);
     exit;
 }
 
 
 foreach ($memberValues as $memberValue) {
     try {
-            $builder->loadStatementBy($member, $memberValue)?->setValues($params);
+        $builder->loadStatementBy($member, $memberValue)?->setValues($params);
 
 
-        echo 'STATEMENT FOUND FOR MEMBER [', strtoupper($member), '] ::: ', $memberValue, PHP_EOL;
-        echo $div;
+        $logger->info('STATEMENT FOUND FOR MEMBER ['. strtoupper($member).'] ::: '. $memberValue);
 
         foreach ($builder->getMetadata() as $key => $value) {
-            echo $key, ' => ', is_array($value) ? implode(', ', $value) : $value, PHP_EOL;
+            $logger->debug('Metadata ->'.$key. ' => '. (is_array($value) ? implode(', ', $value) : $value));
         }
-        echo $subdiv;
         foreach ($builder->getRequiredParams() as $param) {
-            echo 'REQ PARAM ->', $param::class, ' || ', $param->placeholder, $param->required ? '* :: ' : ' :: ', $param->defaultValue ?? 'S/V', ' :: ', $param->type, "\n";
+            $logger->debug('REQ PARAM ->' . $param::class . ' || ' . $param->placeholder . '|' . ($param->required ? '* :: ' : ' :: ') . '|' . $param->defaultValue ?? 'S/V'. '|' . ' :: '. '|' . $param->type);
         }
-        echo $subdiv;
         foreach ($builder->getOptionalParams() as $param) {
-            echo 'OPT PARAM ->', $param::class, ' || ', $param->placeholder, $param->required ? '* :: ' : ' :: ', $param->defaultValue ?? 'S/V', ' :: ', $param->type, "\n";
+            $logger->debug('OPT PARAM ->' . $param::class . ' || ' . $param->placeholder . '|' . ($param->required ? '* :: ' : ' :: ') . '|' . $param->defaultValue ?? 'S/V'. '|' . ' :: '. '|' . $param->type);
         }
-        echo $subdiv;
 
-        echo $builder->getPrettyStatement(), PHP_EOL, PHP_EOL;
-        echo $subdiv;
-
-        echo 'BINDINGS: ', var_export($builder->getBindings(), true), PHP_EOL, PHP_EOL;
-        echo $subdiv;
-        //echo var_export($builder->getDescriptorBy($member, $memberValue)->toArray(), true), PHP_EOL;
-        echo 'Time: ', microtime(true) - $start, PHP_EOL;
+        $logger->info($builder->getPrettyStatement());
+        $logger->debug('BINDINGS: '. var_export($builder->getBindings(), true));
+        $logger->debug('Time: '. microtime(true) - $start);
     } catch (\Throwable $e) {
-        echo $div;
-        echo "[ERR variant ($member) $memberValue]: ", $e->getMessage(), PHP_EOL;
-        echo var_export($builder->getDescriptorBy($member, $memberValue), true), PHP_EOL;
-        echo $e->getTraceAsString(), PHP_EOL;
-        echo PHP_EOL;
+        $logger->error("[ERR variant ($member) $memberValue]: " . $e->getMessage(), [
+            'trace' => $e->getTraceAsString(),
+            'descriptor' => $builder->getDescriptorBy($member, $memberValue),
+            'bindings' => $builder->getBindings(),
+        ]);
     }
-    echo $div;
 }

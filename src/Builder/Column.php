@@ -83,6 +83,15 @@ class Column
 {
     private(set) string $columnExpression;
     private(set) ?string $alias = null;
+    private(set) DataTypes $type = DataTypes::STR
+        {
+            set(string|DataTypes $value) {
+                if (is_string($value)) {
+                    $value = DataTypes::fromName($value);
+                }
+                $this->type = $value;
+            }
+        }
     private(set) bool $visible {
         get {
             return $this->visible;
@@ -125,6 +134,9 @@ class Column
     private(set) string|array|null $tableAlias;
     private(set) ?StatementProcessorInterface $subquery;
     private(set) string $columnId;
+    private(set) ?string $title;
+    private(set) ?string $description;
+    private bool $processed = false;
 
     /**
      * @throws ConfigException
@@ -139,11 +151,14 @@ class Column
         $this->grouped = isset($descriptor['grouped']) && (int)$descriptor['grouped'] === 1;
         $this->order = $descriptor['order'] ?? null;
         $this->tableAlias = $descriptor['tableAlias'] ?? null;
+        $this->type = $descriptor['type'] ?? DataTypes::STR;
         $this->params = [];
         $this->conditions = [];
         $this->joinParams = [];
         $this->joinConditions = [];
         $this->columnId = uniqid(($this->tableAlias ?? 'column') . '::', false);
+        $this->title = $descriptor['title'] ?? null;
+        $this->description = $descriptor['description'] ?? null;
         if (isset($descriptor['subquery'])) {
             $this->subquery = new SelectStatement($descriptor['subquery']['descriptor'], $this->expression);
             $this->subquery->setValues($descriptor['subquery']['arguments'] ?? []);
@@ -158,6 +173,10 @@ class Column
     {
         $this->processColumnExpression()
             ->processAlias();
+        if (!$this->title) {
+            $this->title = implode(' ', array_map('ucfirst', preg_split('/_|(?=[A-Z])/', $this->modelName(), -1, PREG_SPLIT_NO_EMPTY)));
+        }
+        $this->processed = true;
         return $this;
     }
 
@@ -174,7 +193,7 @@ class Column
     /**
      * @throws ConfigException
      */
-    private function setParams(): Column
+    private function setParams(): self
     {
         if (isset($this->descriptor['params'])) {
             foreach ($this->descriptor['params'] as $param) {
@@ -192,12 +211,12 @@ class Column
         return $this;
     }
 
-    private function setJoinConditions(): Column
+    private function setJoinConditions(): self
     {
         if (isset($this->descriptor['joinConditions'])) {
             foreach ($this->descriptor['joinConditions'] as $condition) {
                 if (isset($condition['name'])) {
-                   // echo 'JOIN PARAM ', $condition['name'], var_export($condition, true), PHP_EOL;
+                    // echo 'JOIN PARAM ', $condition['name'], var_export($condition, true), PHP_EOL;
                     $param = new Param($condition, $this->expression, $this->quote_identifier);
                     $this->joinParams[$param->placeholder] = $param;
                 } else {
@@ -215,7 +234,7 @@ class Column
     /**
      * @throws ConfigException
      */
-    private function setConditions(): Column
+    private function setConditions(): self
     {
         if (isset($this->descriptor['conditions'])) {
             foreach ($this->descriptor['conditions'] as $condition) {
@@ -253,7 +272,7 @@ class Column
         $this->columnName = $colName;
 
         if (isset($this->descriptor['template'])) {
-            $colName = str_replace([':alias',':colname'], [$this->tableAlias, $colName], $this->descriptor['template']);
+            $colName = str_replace([':alias', ':colname'], [$this->tableAlias, $colName], $this->descriptor['template']);
         }
         if (isset($this->descriptor['sqlexpression'])) {
             $arguments = $this->descriptor['arguments'] ?? [];
@@ -282,13 +301,21 @@ class Column
         }
     }
 
+    public function modelName(): string
+    {
+        $array = preg_split('/[ .]/', $this->alias ?? $this->descriptor['name']);
+        return array_pop($array);
+    }
+
     /**
      * @throws ConfigException
      */
     public function __toString(): string
     {
-        $this->process();
-        return $this->columnExpression . $this->alias;
+        if (!$this->processed) {
+            $this->process();
+        }
+        return $this->columnExpression . ($this->alias ?? '');
     }
 
 }

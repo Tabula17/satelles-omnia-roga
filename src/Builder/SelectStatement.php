@@ -411,7 +411,6 @@ class SelectStatement implements StatementProcessorInterface
             }
         }
     }
-
     private function processCondition($condition, $colExpression): void
     {
         $condition->setColumnExpression($colExpression);

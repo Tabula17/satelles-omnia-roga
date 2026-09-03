@@ -2,6 +2,8 @@
 
 namespace Tabula17\Satelles\Omnia\Roga\Descriptor;
 
+use Tabula17\Satelles\Omnia\Roga\Builder\TypeOperations;
+use Tabula17\Satelles\Omnia\Roga\Collection\TypeOperationsCollection;
 use Tabula17\Satelles\Utilis\Config\AbstractDescriptor;
 
 /**
@@ -21,12 +23,27 @@ class MetadataDescriptor extends AbstractDescriptor
      * The setter validates the provided value against a predefined list of available operations and normalizes it to lowercase.
      * If any invalid operations are included, they are removed from the final value.
      */
-    protected(set) string $operation {
-        set(string $value) {
-            $check = explode(',', $value);
-            foreach ($check as $k => $item) {
-                if (!in_array($item, $this->availableOperations)) {
-                    unset($check[$k]);
+    protected(set) TypeOperationsCollection $operation {
+        set(string|array|TypeOperations|TypeOperationsCollection $value) {
+
+            if($value instanceof TypeOperationsCollection){
+                $this->operation = $value;
+                return;
+            }
+
+            $this->operation = new TypeOperationsCollection();
+            if (is_string($value)) {
+                $value = array_map('trim', explode(',', $value));
+            }
+            if($value instanceof TypeOperations){
+                $value = [$value];
+            }
+            $this->operation->import($value);
+        }
+    }
+    /**
+     * @var string|null $variant Can be a string or null. Represents the variant(s) associated with the metadata.
+     * Used to filter metadata based on the variant if necessary, e.g., for differentiating between sync and async operations
                 }
             }
             $value = implode(',', $check);

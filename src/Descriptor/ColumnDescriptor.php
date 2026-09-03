@@ -106,5 +106,7 @@ final class ColumnDescriptor extends AbstractDescriptor
         }
     }
     protected(set) string $tableAlias;
+    protected(set) ?string $title;
+    protected(set) ?string $description;
 
 }

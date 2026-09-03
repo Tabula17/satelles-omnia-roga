@@ -2,16 +2,20 @@
 
 namespace Tabula17\Satelles\Omnia\Roga\Builder;
 
-enum DataTypes
+use BcMath\Number;
+use DateTimeImmutable;
+use Throwable;
+
+enum DataTypes: string
 {
-    case BOOL;
-    case NULL;
-    case INT;
-    case STR;
-    case DATE;
-    case DATETIME;
-    case NUMERIC;
-    case EXPRESSION;
+    case BOOL = 'bool';
+    case NULL = 'null';
+    case INT = 'int';
+    case STR = 'string';
+    case DATE = 'date';
+    case DATETIME = 'datetime';
+    case NUMERIC = 'numeric';
+    case EXPRESSION = 'expression';
 
     public static function fromName(string $value): DataTypes
     {
@@ -26,11 +30,55 @@ enum DataTypes
             default => self::STR,
         };
     }
-    /*
+
+    /**
+     * Returns the primitive type of the data type
      *
-            'bool', 'boolean' => self::BOOL->value,
-            'null' => self::NULL->value,
-            'int', 'integer' => self::INT->value,
-            'str', 'string', 'date', 'datestring', 'datetime', 'time', 'timestring', 'datetimestring', 'float', 'number', 'numeric' => self::STR->value,
+     * @return string
      */
+    public function primitiveType(): string
+    {
+        return match ($this) {
+            self::BOOL => 'bool',
+            self::NULL => 'null',
+            self::INT => 'int',
+            self::NUMERIC => 'float',
+            default => 'string'
+        };
+    }
+
+    public function isDate(): bool
+    {
+        return match ($this) {
+            self::DATE, self::DATETIME => true,
+            default => false,
+        };
+    }
+
+    public function hydrator(mixed $value): mixed
+    {
+        $dateTimeHandler = static function (string $value) {
+            try {
+                return new DateTimeImmutable($value);
+            } catch (Throwable $ignored) {
+                return $value;
+            }
+        };
+        $mathHandler = static function (string $value) {
+            try {
+                return new Number($value);
+            } catch (Throwable $ignored) {
+                return (float)$value;
+            }
+        };
+        return match ($this) {
+            self::BOOL => (bool)$value,
+            self::NULL => null,
+            self::INT => (int)$value,
+            self::NUMERIC => $mathHandler($value),
+            self::DATE, self::DATETIME => $dateTimeHandler($value),
+            default => $value,
+        };
+    }
+
 }

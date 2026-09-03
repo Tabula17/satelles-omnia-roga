@@ -51,7 +51,7 @@ class StatementBuilder
     {
 
         if (!isset($this->descriptor)) {
-            $this->logger?->debug(sprintf($this->statementName.': StatementBuilder::getDescriptorBy(%s, %s, %s, %s)', $member, $value, $version, $variant));
+            $this->logger?->debug(sprintf($this->statementName . ': StatementBuilder::getDescriptorBy(%s, %s, %s, %s)', $member, $value, $version, $variant));
             $this->descriptor = $this->collection->getDescriptorsByMetadata($member, $value)?->getDescriptorsByVersion($version)?->getVariant($variant);
         }
         return $this->descriptor;
@@ -89,12 +89,6 @@ class StatementBuilder
         $this->logger?->debug(sprintf('StatementBuilder::loadStatementBy(%s, %s, %s, %s)', $member, $value, $version, $variant));
         //$this->descriptor = $this->collection->getDescriptorsByMetadata($member, $value)->getDescriptorByVersion($version);
         $descriptor = $this->getDescriptorBy($member, $value, $version, $variant);
-
-        $this->logger?->debug(sprintf('Descriptor found: %s', implode(' | ', array_map(
-            static fn($key, $value) => "$key: $value",
-            array_keys($descriptor?->metadata->toArray() ?? []),
-            array_values($descriptor?->metadata->toArray() ?? [])
-        ))));
         if (isset($descriptor) && $descriptor instanceof Descriptor\StatementDescriptor) {
             $expression = new Expression();
             $statement = null;
@@ -241,4 +235,24 @@ class StatementBuilder
     {
         return $this->descriptor->type;
     }
+
+    public function getModel(): array
+    {
+        $model = [];
+        if ($this->processor instanceof SelectStatement || $this->processor instanceof UnionStatement) {
+            $this->processor->process();
+            foreach ($this->processor->columns as $column) {
+               //var_dump($column);
+                $model[$column->modelName()] = [
+                    'title' => $column->title,
+                    'description' => $column->description,
+                    'type' => $column->type->value,
+                    'primitiveType' => $column->type->primitiveType(),
+                    'hydrate' => fn($value) => $column->type->hydrator($value),
+                ];
+            }
+        }
+        return $model;
+    }
+
 }
