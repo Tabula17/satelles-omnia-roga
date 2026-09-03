@@ -6,7 +6,10 @@ use Tabula17\Satelles\Utilis\Config\AbstractDescriptor;
 
 class StatementDescriptor extends AbstractDescriptor
 {
-    protected(set) string $type;
+    protected(set) DescriptorClasses $type = DescriptorClasses::SELECT
+        {
+            set(string|DescriptorClasses $value) => is_string($value) ? DescriptorClasses::fromValue($value) : $value;
+        }
     protected(set) MetaDataDescriptor $metadata {
         set(array|MetaDataDescriptor $value) {
             if (is_array($value)) {

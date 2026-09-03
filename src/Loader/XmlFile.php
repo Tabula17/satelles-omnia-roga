@@ -4,7 +4,7 @@ namespace Tabula17\Satelles\Omnia\Roga\Loader;
 
 use Psr\Log\LoggerInterface;
 use Tabula17\Satelles\Omnia\Roga\Collection\StatementCollection;
-use Tabula17\Satelles\Omnia\Roga\Descriptor\Descriptors;
+use Tabula17\Satelles\Omnia\Roga\Descriptor\DescriptorClasses;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\MetadataDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Exception\ExceptionDefinitions;
 use Tabula17\Satelles\Omnia\Roga\Exception\InvalidArgumentException;
@@ -199,7 +199,7 @@ class XmlFile implements LoaderInterface
 
             foreach ($statements as $statement) {
                 $subsDetectedByKey = ArrayUtilities::getArrayPathsByKey($statement, 'subquery');
-                $descriptorClass = Descriptors::fromName($statement['type'] ?? 'select');
+                $descriptorClass = DescriptorClasses::fromValue($statement['type'] ?? 'select')->value;
                 $statementIdentifiers = array_intersect_key($statement['metadata'], array_flip(MetadataDescriptor::getIdentifiedBy()));
                 $subqueriesForPath = [];
                 if (!empty($subsDetectedByKey)) {
