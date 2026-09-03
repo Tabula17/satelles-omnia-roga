@@ -59,7 +59,7 @@ class Func
     /**
      * @return string
      */
-    public function __toString()
+    public function __toString(): string
     {
         return $this->name . '(' . implode(', ', $this->arguments) . ')';
     }

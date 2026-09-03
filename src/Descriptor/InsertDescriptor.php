@@ -46,11 +46,9 @@ class InsertDescriptor extends StatementDescriptor
                 $this->select = $value;
             } else if (is_array($value) && isset($value['subquery'])) {
                 if(!isset($value['subquery']['descriptor'])){
-                    var_dump($value);
-                   // throw new \Exception('Subquery descriptor not found');
-                }else{
-                    $this->select = new SelectDescriptor($value['subquery']['descriptor']);
+                   throw new \Exception('Subquery descriptor not found');
                 }
+                $this->select = new SelectDescriptor($value['subquery']['descriptor']);
             } else {
                 $this->select = new SelectDescriptor($value);
             }

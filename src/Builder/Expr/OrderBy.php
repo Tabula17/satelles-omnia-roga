@@ -99,7 +99,7 @@ class OrderBy
     /**
      * @return string
      */
-    public function __toString()
+    public function __toString(): string
     {
         if ($this->prettyPrint) {
             $this->preSeparator = ($this->prettyChars[0] ?? '') . $this->preSeparator;

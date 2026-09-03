@@ -308,7 +308,7 @@ class DeleteStatement implements StatementProcessorInterface
     {
         return isset($this->values[$placeholder]);
     }
-    public function __toString()
+    public function __toString(): string
     {
         $this->process();
         $parts = [];

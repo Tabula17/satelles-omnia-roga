@@ -68,7 +68,10 @@ class UpdateStatement implements StatementProcessorInterface
         return $this;
     }
 
-    private function setColumns(): self
+    /**
+     * @throws ConfigException
+     */
+    private function setColumns(): void
     {
         //echo 'SET COLUMNS -:: ', var_export($this->statementParts['into']['columns'], true), PHP_EOL;
         if (isset($this->statementParts['to']['columns'])) {
@@ -105,7 +108,6 @@ class UpdateStatement implements StatementProcessorInterface
                 $this->columns[] = $column;
             }
         }
-        return $this;
     }
 
 
@@ -151,7 +153,7 @@ class UpdateStatement implements StatementProcessorInterface
         return $this;
     }
 
-    private function processWhere(): UpdateStatement
+    private function processWhere(): void
     {
         foreach ($this->conditions as $condition) {
             if ($condition instanceof Param) {
@@ -209,7 +211,6 @@ class UpdateStatement implements StatementProcessorInterface
                 $this->having->add($hor);
             }
         }
-        return $this;
     }
 
     private function processParam($param, $colExpression): void
@@ -344,7 +345,7 @@ class UpdateStatement implements StatementProcessorInterface
         return $this;
     }
 
-    public function __toString()
+    public function __toString(): string
     {
         $this->process();
         $parts = [];

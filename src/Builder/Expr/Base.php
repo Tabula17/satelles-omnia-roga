@@ -130,7 +130,7 @@ abstract class Base
     /**
      * @return string
      */
-    public function __toString()
+    public function __toString(): string
     {
         if ($this->count() === 1) {
             return (string)$this->parts[0];

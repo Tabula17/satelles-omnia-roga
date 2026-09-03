@@ -90,7 +90,7 @@ class Join
     /**
      * @return string
      */
-    public function __toString()
+    public function __toString(): string
     {
         $join = [Keywords::fromName($this->joinType)->value, Keywords::JOIN->value, $this->join];
         if ($this->alias) {

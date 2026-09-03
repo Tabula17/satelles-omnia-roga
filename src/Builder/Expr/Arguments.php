@@ -18,7 +18,7 @@ class Arguments extends Base
     /**
      * @return string
      */
-    public function __toString()
+    public function __toString(): string
     {
         if ($this->count() === 0) {
             return '';

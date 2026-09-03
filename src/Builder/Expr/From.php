@@ -19,7 +19,7 @@
 
 namespace Tabula17\Satelles\Omnia\Roga\Builder\Expr;
 
-use Tabula17\Satelles\Omnia\Roga\Descriptor\AbstractDescriptor;
+use Tabula17\Satelles\Utilis\Config\AbstractDescriptor;
 
 /**
  * Expression class for SQL from.
@@ -56,7 +56,7 @@ final readonly class From
     /**
      * @return string
      */
-    public function __toString()
+    public function __toString(): string
     {
         $pre = $this->isSubquery ? '(' : '';
         $post = $this->isSubquery ? ')' : '';

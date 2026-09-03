@@ -201,7 +201,10 @@ class InsertStatement implements StatementProcessorInterface
         return $this;
     }
 
-    public function __toString()
+    /**
+     * @throws ConfigException
+     */
+    public function __toString(): string
     {
         $this->process();
         $prettyChar = $this->prettyPrint ? "\n" : ' ';

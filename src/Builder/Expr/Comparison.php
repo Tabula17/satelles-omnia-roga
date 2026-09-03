@@ -76,7 +76,7 @@ class Comparison
     /**
      * @return string
      */
-    public function __toString()
+    public function __toString(): string
     {
         return $this->leftExpr . ' ' . $this->operator . ' ' . $this->rightExpr;
     }

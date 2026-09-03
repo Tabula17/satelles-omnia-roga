@@ -70,7 +70,7 @@ class Math
     /**
      * @return string
      */
-    public function __toString()
+    public function __toString(): string
     {
         // Adjusting Left Expression
         $leftExpr = (string) $this->leftExpr;
