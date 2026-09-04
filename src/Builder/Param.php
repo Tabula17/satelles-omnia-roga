@@ -8,6 +8,7 @@ use Tabula17\Satelles\Omnia\Roga\Descriptor\ParamDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
 use Tabula17\Satelles\Omnia\Roga\Exception\ExceptionDefinitions;
 use Tabula17\Satelles\Omnia\Roga\Exception\ValueRequiredException;
+use Tabula17\Satelles\Utilis\Data\DataTypes;
 
 /**
  * PDO::PARAM_BOOL (int)

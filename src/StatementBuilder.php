@@ -229,9 +229,9 @@ class StatementBuilder
     /**
      * Retrieves the type of the statement from the descriptor.
      *
-     * @return string The type of the statement.
+     * @return Descriptor\DescriptorClasses The type of the statement.
      */
-    public function getStatementType(): string
+    public function getStatementType(): Descriptor\DescriptorClasses
     {
         return $this->descriptor->type;
     }

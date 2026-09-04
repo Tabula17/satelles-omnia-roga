@@ -5,6 +5,7 @@ namespace Tabula17\Satelles\Omnia\Roga\Builder;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\ColumnDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\OrderDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
+use Tabula17\Satelles\Utilis\Data\DataTypes;
 
 /**
  *  Ejemplo de columna:
