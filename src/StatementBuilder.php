@@ -3,6 +3,7 @@
 namespace Tabula17\Satelles\Omnia\Roga;
 
 use Psr\Log\LoggerInterface;
+use Tabula17\Satelles\Omnia\Roga\Builder\Column;
 use Tabula17\Satelles\Omnia\Roga\Builder\DeleteStatement;
 use Tabula17\Satelles\Omnia\Roga\Builder\ExecuteStatement;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expression;
@@ -13,10 +14,12 @@ use Tabula17\Satelles\Omnia\Roga\Builder\SelectStatement;
 use Tabula17\Satelles\Omnia\Roga\Builder\StatementProcessorInterface;
 use Tabula17\Satelles\Omnia\Roga\Builder\UnionStatement;
 use Tabula17\Satelles\Omnia\Roga\Builder\UpdateStatement;
+use Tabula17\Satelles\Omnia\Roga\Collection\ModelCollection;
 use Tabula17\Satelles\Omnia\Roga\Collection\StatementCollection;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\DeleteDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\ExecuteDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\InsertDescriptor;
+use Tabula17\Satelles\Omnia\Roga\Descriptor\ModelDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\SelectDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\StatementDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\UnionDescriptor;
@@ -236,20 +239,17 @@ class StatementBuilder
         return $this->descriptor->type;
     }
 
-    public function getModel(): array
+    public function getModel(): ModelCollection
     {
-        $model = [];
+        $model = new ModelCollection();
         if ($this->processor instanceof SelectStatement || $this->processor instanceof UnionStatement) {
             $this->processor->process();
             foreach ($this->processor->columns as $column) {
+                /**
+                 * @var Column $column
+                 */
                //var_dump($column);
-                $model[$column->modelName()] = [
-                    'title' => $column->title,
-                    'description' => $column->description,
-                    'type' => $column->type->value,
-                    'primitiveType' => $column->type->primitiveType(),
-                    'hydrate' => fn($value) => $column->type->hydrator($value),
-                ];
+                $model->set($column->modelName(), new ModelDescriptor($column));
             }
         }
         return $model;
