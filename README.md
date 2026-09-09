@@ -20,7 +20,7 @@ This is a library package intended to be used from your PHP application. An exam
 - Language: PHP (>= 8.4)
 - Package manager: Composer
 - Type of project: PHP library (no framework)
-- Notable runtime extensions (required): `ext-zip`, `ext-fileinfo`, `ext-swoole` (>= 6.0), `ext-dom`, `ext-simplexml`, `ext-pdo`
+- Notable runtime extensions (required): `ext-zip`, `ext-fileinfo`,  `ext-dom`, `ext-simplexml`
 - Optional extensions (suggested): `ext-redis`, `ext-memcached`
 
 #### Requirements
@@ -153,7 +153,7 @@ TODO:
 Make sure your environment satisfies:
 
 - PHP 8.4+
-- Enabled extensions: zip, fileinfo, swoole>=6.0, dom, simplexml, pdo
+- Enabled extensions: zip, fileinfo, dom, simplexml
 - Optional: redis or memcached if you enable caching
 
 #### Development
