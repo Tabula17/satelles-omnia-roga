@@ -2,6 +2,7 @@
 
 namespace Tabula17\Satelles\Omnia\Roga\Descriptor;
 
+use Tabula17\Satelles\Omnia\Roga\Builder\QuotesEnum;
 use Tabula17\Satelles\Omnia\Roga\Builder\TypeOperations;
 use Tabula17\Satelles\Omnia\Roga\Collection\TypeOperationsCollection;
 use Tabula17\Satelles\Utilis\Config\AbstractDescriptor;
@@ -67,6 +68,15 @@ class MetadataDescriptor extends AbstractDescriptor
      */
     protected(set) array|string|null $client = null;
     protected(set) bool $quoteIdentifier = false;
+    public QuotesEnum $quoteType = QuotesEnum::NONE
+        {
+            set(QuotesEnum|string $value) {
+                if(is_string($value)){
+                    $value = QuotesEnum::for($value);
+                }
+                $this->quoteType = $value;
+            }
+        }
     /**
      * Sets the version value after validating its format. If the provided value is invalid,
      * a warning is triggered and the version is set to '0.0.0'.
@@ -90,7 +100,6 @@ class MetadataDescriptor extends AbstractDescriptor
             $this->version = $cleanValue;
         }
     }
-
     private function isValidVersion(string $version): bool
     {
         $pattern = '/^\d+(?:\.\d+)*(?:(?:[_-]?(?:dev|alpha|a|beta|b|RC|rc|pl|p)\d*(?:\.\d+)*)|#\d*)*(?:\+\d+)?$/';
@@ -100,7 +109,6 @@ class MetadataDescriptor extends AbstractDescriptor
 
         return false;
     }
-
     public function getAvailableOperations(): array
     {
         return $this->availableOperations;

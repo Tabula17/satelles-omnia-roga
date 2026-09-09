@@ -94,6 +94,8 @@ use Tabula17\Satelles\Utilis\Data\DataTypes;
  */
 class Param implements Paraminterface
 {
+    use FormatTrait;
+
     private(set) string $placeholder {
         get {
             return $this->placeholder;
@@ -140,13 +142,14 @@ class Param implements Paraminterface
     private(set) ?SelectStatement $subquery;
     private bool $subqueryAsArgument = false;
     private(set) ?string $description;
+
     /**
      * @throws ConfigException
      */
     public function __construct(
         private readonly ParamDescriptor $descriptor,
         private readonly Expression      $expression = new Expression(),
-        public string                    $quote_identifier = '"',
+        public ?QuotesEnum               $quote_identifier = QuotesEnum::DOUBLE_QUOTE,
         public string                    $quote_value = "'",
         public string                    $pre_procedure_variable = "" // @ en SQLServer
     )
@@ -174,6 +177,8 @@ class Param implements Paraminterface
         $this->writeFilter = isset($this->descriptor['writeFilter']) && (bool)$this->descriptor['writeFilter'] === true;
         if (isset($descriptor['subquery'])) {
             $this->subquery = new SelectStatement($descriptor['subquery']['descriptor'], $this->expression);
+            $this->subquery->getMetadata()->set('quoteIdentifier', $this->quote_identifier !== QuotesEnum::NONE);
+            $this->subquery->getMetadata()->set('quoteType', $this->quote_identifier);
             $this->subquery->setValues($descriptor['subquery']['arguments'] ?? []);
             if (isset($descriptor['subqueryAsArgument'])) {
                 $this->subqueryAsArgument = (bool)$descriptor['subqueryAsArgument'];
@@ -190,6 +195,7 @@ class Param implements Paraminterface
         $this->value = $value;
         return $this;
     }
+
     /**
      * @throws ValueRequiredException|DateMalformedStringException
      */
@@ -233,23 +239,23 @@ class Param implements Paraminterface
     {
 
         $type = $this->descriptor['type'] ?? 'string';
-
+        $dataType = DataTypes::fromName($type);
         if (empty($value) && isset($this->descriptor['nullonempty'])) {
             $this->type = 'null';
             return null;
         }
         if ($value !== null) {
-            if (DataTypes::fromName($type) === DataTypes::DATETIME || DataTypes::fromName($type) === DataTypes::DATE) {
-                $format = $this->format ?? (DataTypes::fromName($type) === DataTypes::DATE ? 'd-m-Y' : 'd-m-Y H:i:s');
+            if ($dataType === DataTypes::DATETIME || $dataType === DataTypes::DATE) {
+                $format = $this->format ?? ($dataType === DataTypes::DATE ? 'd-m-Y' : 'd-m-Y H:i:s');
                 $value = $value ? new DateTime($value)->format($format) : null;
             }
-            if (DataTypes::fromName($type) === DataTypes::INT) {
+            if ($dataType === DataTypes::INT) {
                 $value = (int)$value;
             }
-            if (DataTypes::fromName($type) === DataTypes::BOOL) {
+            if ($dataType === DataTypes::BOOL) {
                 $value = (bool)$value;
             }
-            if (DataTypes::fromName($type) === DataTypes::NUMERIC) {
+            if ($dataType === DataTypes::NUMERIC) {
                 $value = (float)$value;
                 if ($this->format) {
                     // formato esperado 0,000.### | 0.000,#
@@ -272,11 +278,12 @@ class Param implements Paraminterface
                     $value = number_format($value, $decimals, $decimal_separator, $thousands_separator);
                 }
             }
+
         }
         return $value;
     }
 
-    public function setColumnExpression(string $columnExpression): Param
+    public function setColumnExpression(string $columnExpression): self
     {
         $this->columnExpression = $columnExpression;
         return $this;
@@ -302,6 +309,7 @@ class Param implements Paraminterface
     public function __toString(): string
     {
         $value = $this->getValue();
+        $dataType = DataTypes::fromName($this->type);
         if (empty($value) && DataTypes::fromName($this->type) !== DataTypes::BOOL) {
             return '';
         }
@@ -351,7 +359,7 @@ class Param implements Paraminterface
                 DataTypes::NUMERIC,
                 DataTypes::EXPRESSION
             ];
-            $quote = !in_array(DataTypes::fromName($this->type), $noQuotables, true);
+            $quote = !in_array($dataType, $noQuotables, true);
             if (is_array($value)) {
                 if ($quote) {
                     array_walk($value, fn($v, $k) => $this->quoteValue($v));
@@ -361,6 +369,9 @@ class Param implements Paraminterface
                 $value = $this->quoteValue($value);
             }
             $template = $this->paramTemplate;
+            if ($dataType === DataTypes::EXPRESSION && !str_starts_with($value, ':')) {
+                $value = $this->quoteIdentifier($value, $this->quote_identifier);
+            }
             $param = str_replace([":colname", ":param"], [$colExpression, $value], $template);
         }
         return $param;

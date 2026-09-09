@@ -66,7 +66,7 @@ enum TypeOperations implements JsonSerializable, EnumMethodsInterface
     /**
      * @inheritDoc
      */
-    public function jsonSerialize(): mixed
+    public function jsonSerialize(): string
     {
         return $this->value();
     }

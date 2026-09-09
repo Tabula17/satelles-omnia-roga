@@ -9,11 +9,12 @@
             <allowed>2</allowed>
             <allowed>3</allowed>
             <version>1.0</version>
+            <quoteIdentifier>0</quoteIdentifier>
+            <quoteType>mysql</quoteType>
         </metadata>
         <from>
             <table>dbo.Tabla_Base</table>
             <alias>tb</alias>
-            <quoteIdentifier>1</quoteIdentifier>
             <columns>
                 <column>
                     <name>columna_1</name>

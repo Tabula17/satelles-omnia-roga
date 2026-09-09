@@ -6,6 +6,7 @@ use Tabula17\Satelles\Omnia\Roga\Builder\Expr\Andx;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expr\Arguments;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expr\From;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expr\Orx;
+use Tabula17\Satelles\Omnia\Roga\Descriptor\MetadataDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\TableDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\UpdateDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
@@ -371,5 +372,9 @@ class UpdateStatement implements StatementProcessorInterface
     public function getParam(string $placeholder): ?Param
     {
         return $this->params[$placeholder] ?? $this->filters[$placeholder] ?? null;
+    }
+    public function getMetadata(): ?MetadataDescriptor
+    {
+        return $this->statementParts->metadata ?? null;
     }
 }

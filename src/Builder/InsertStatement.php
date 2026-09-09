@@ -5,12 +5,14 @@ namespace Tabula17\Satelles\Omnia\Roga\Builder;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expr\Arguments;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expr\From;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\InsertDescriptor;
+use Tabula17\Satelles\Omnia\Roga\Descriptor\MetadataDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\TableDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
 use Tabula17\Satelles\Omnia\Roga\Exception\ExceptionDefinitions;
 
 class InsertStatement implements StatementProcessorInterface
 {
+    use FormatTrait;
 
     private(set) array $values = [];
     private array $arguments = [];
@@ -40,7 +42,16 @@ class InsertStatement implements StatementProcessorInterface
         $this->setTable()->setSelect()->setColumns()->setArguments();
     }
 
-    private function setTable(): InsertStatement
+    private function getQuote(): QuotesEnum
+    {
+        $quote = QuotesEnum::NONE;
+        if ($this->statementParts->metadata->quoteIdentifier) {
+            $quote = $this->statementParts->metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
+        }
+        return $quote;
+    }
+
+    private function setTable(): self
     {
         if (isset($this->statementParts['table'])) {
             $table = $this->statementParts['table'];
@@ -58,8 +69,12 @@ class InsertStatement implements StatementProcessorInterface
         return $this;
     }
 
+    /**
+     * @throws ConfigException
+     */
     private function setColumns(): self
     {
+        $quote = $this->getQuote();
         //echo 'SET COLUMNS -:: ', var_export($this->statementParts['into']['columns'], true), PHP_EOL;
         if (isset($this->statementParts['into']['columns'])) {
             foreach ($this->statementParts['into']['columns'] as $column) {
@@ -69,12 +84,15 @@ class InsertStatement implements StatementProcessorInterface
 
                         $argument = new Param(
                             descriptor: $param,
-                            expression: $this->expression
+                            expression: $this->expression,
+                            quote_identifier: $quote
                         );
                         $argument->setColumnExpression($column->name);
                         $this->params[$argument->placeholder] = $argument;
                     }
                 } else if (isset($this->select) && $this->select instanceof SelectStatement) {
+                    $this->select->getMetadata()->set('quoteIdentifier', $quote !== QuotesEnum::NONE);
+                    $this->select->getMetadata()->set('quoteType', $quote);
                     $this->columns->add($column->name);
                 }
                 /*
@@ -97,7 +115,8 @@ class InsertStatement implements StatementProcessorInterface
             foreach ($this->statementParts['arguments'] as $argument) {
                 $param = new Param(
                     descriptor: $argument,
-                    expression: $this->expression
+                    expression: $this->expression,
+                    quote_identifier: $this->getQuote()
                 );
                 $this->params[$param->placeholder] = $param;
             }
@@ -182,6 +201,7 @@ class InsertStatement implements StatementProcessorInterface
     {
         return isset($this->values[$placeholder]);
     }
+
     public function process(): InsertStatement
     {
         foreach ($this->params as $param) {
@@ -211,12 +231,12 @@ class InsertStatement implements StatementProcessorInterface
         $this->columns->prettyPrint = $this->prettyPrint;
         $this->placeholders->prettyPrint = $this->prettyPrint;
 
-        $insert = [Keywords::INSERT->value . ' ' . Keywords::INTO->value. ' ' . $this->table, $this->columns];
+        $insert = [Keywords::INSERT->value . ' ' . Keywords::INTO->value . ' ' . $this->quoteIdentifier($this->table, $this->getQuote()), $this->columns];
         if (!empty($this->params)) {
             $insert[] = Keywords::VALUES->value;
             $insert[] = $this->placeholders;
         } else if (isset($this->select)) {
-            if($this->columns->count()!==$this->select->select->count()){
+            if ($this->columns->count() !== $this->select->select->count()) {
                 throw new ConfigException(ExceptionDefinitions::INSERT_COLUMNS_AND_SELECT_COUNT_MISMATCH->value);
             }
             $insert[] = $this->select;
@@ -236,5 +256,10 @@ class InsertStatement implements StatementProcessorInterface
     public function getBindings(): array
     {
         return $this->bindings;
+    }
+
+    public function getMetadata(): ?MetadataDescriptor
+    {
+        return $this->statementParts->metadata ?? null;
     }
 }

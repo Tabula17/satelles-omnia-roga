@@ -67,7 +67,7 @@ final class ColumnDescriptor extends AbstractDescriptor
                         try {
                             $params[] = isset($param['name']) ? new ParamDescriptor($param) : new ConditionDescriptor($param);
                         }catch (\Throwable $exception){
-                            echo $exception->getMessage(), PHP_EOL;
+                           // echo $exception->getMessage(), PHP_EOL;
                             //echo var_export($param, true), PHP_EOL;
                         }
                     }

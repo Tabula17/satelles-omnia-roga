@@ -7,6 +7,7 @@ use Tabula17\Satelles\Omnia\Roga\Builder\Expr\Arguments;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expr\From;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expr\Orx;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\DeleteDescriptor;
+use Tabula17\Satelles\Omnia\Roga\Descriptor\MetadataDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\TableDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
 use Tabula17\Satelles\Omnia\Roga\Exception\ExceptionDefinitions;
@@ -328,5 +329,9 @@ class DeleteStatement implements StatementProcessorInterface
 
         $char = $this->prettyPrint ? "\n" : ' ';
         return implode($char, $parts);
+    }
+    public function getMetadata(): ?MetadataDescriptor
+    {
+        return $this->statementParts->metadata ?? null;
     }
 }

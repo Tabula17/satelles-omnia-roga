@@ -82,6 +82,8 @@ use Tabula17\Satelles\Utilis\Data\DataTypes;
  */
 class Column
 {
+    use FormatTrait;
+
     private(set) string $columnExpression;
     private(set) ?string $alias = null;
     private(set) DataTypes $type = DataTypes::STR
@@ -145,7 +147,7 @@ class Column
     public function __construct(
         private readonly ColumnDescriptor $descriptor,
         private readonly Expression       $expression,
-        public string                     $quote_identifier = '"'
+        public ?QuotesEnum                $quote_identifier = QuotesEnum::DOUBLE_QUOTE
     )
     {
         $this->visible = isset($descriptor['visible']) && (bool)$descriptor['visible'] === true;
@@ -162,6 +164,8 @@ class Column
         $this->description = $descriptor['description'] ?? null;
         if (isset($descriptor['subquery'])) {
             $this->subquery = new SelectStatement($descriptor['subquery']['descriptor'], $this->expression);
+            $this->subquery->getMetadata()->set('quoteIdentifier', $this->quote_identifier !== QuotesEnum::NONE);
+            $this->subquery->getMetadata()->set('quoteType', $this->quote_identifier);
             $this->subquery->setValues($descriptor['subquery']['arguments'] ?? []);
         }
         $this->setParams()->setJoinConditions()->setConditions();
@@ -170,7 +174,7 @@ class Column
     /**
      * @throws ConfigException
      */
-    public function process(): Column
+    public function process(): self
     {
         $this->processColumnExpression()
             ->processAlias();
@@ -212,6 +216,9 @@ class Column
         return $this;
     }
 
+    /**
+     * @throws ConfigException
+     */
     private function setJoinConditions(): self
     {
         if (isset($this->descriptor['joinConditions'])) {
@@ -235,7 +242,7 @@ class Column
     /**
      * @throws ConfigException
      */
-    private function setConditions(): self
+    private function setConditions(): void
     {
         if (isset($this->descriptor['conditions'])) {
             foreach ($this->descriptor['conditions'] as $condition) {
@@ -250,10 +257,9 @@ class Column
                 }
             }
         }
-        return $this;
     }
 
-    private function processColumnExpression(): Column
+    private function processColumnExpression(): self
     {
 
         if (isset($this->subquery) && $this->subquery instanceof StatementProcessorInterface) {
@@ -268,7 +274,7 @@ class Column
                 }
             }
             $columnParts[] = $this->descriptor['name'];
-            $colName = implode('.', $columnParts);
+            $colName = $this->quoteIdentifier(implode('.', $columnParts), $this->quote_identifier);
         }
         $this->columnName = $colName;
 
@@ -298,7 +304,7 @@ class Column
     private function processAlias(): void
     {
         if (isset($this->descriptor['alias'])) {
-            $this->alias = ' AS ' . $this->descriptor['alias'];
+            $this->alias = ' AS ' . $this->quoteIdentifier($this->descriptor['alias'], $this->quote_identifier);
         }
     }
 

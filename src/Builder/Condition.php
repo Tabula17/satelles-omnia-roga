@@ -9,6 +9,8 @@ use Tabula17\Satelles\Omnia\Roga\Exception\ValueRequiredException;
 
 class Condition
 {
+    use FormatTrait;
+
     private(set) string $columnExpression;
     private(set) bool $needColumnExpression;
     private(set) ?int $combined;
@@ -35,7 +37,7 @@ class Condition
     public function __construct(
         private readonly ConditionDescriptor $descriptor,
         private readonly Expression          $expression,
-        public string                        $quote_identifier = '"',
+        public ?QuotesEnum                   $quote_identifier = QuotesEnum::DOUBLE_QUOTE,
         public string                        $pre_procedure_variable = "" // @ en SQLServer
     )
     {
@@ -47,7 +49,7 @@ class Condition
                 $joinedColumn[] = $descriptor['tableAlias'];
             }
             $joinedColumn[] = $descriptor['columnName'];
-            $this->arguments[] = implode('.', $joinedColumn);
+            $this->arguments[] = $this->quoteIdentifier(implode('.', $joinedColumn), $this->quote_identifier);
         } else {
             $this->arguments = $descriptor['arguments'] ?? [];
         }
@@ -59,6 +61,8 @@ class Condition
         $this->conditionId = uniqid(strtolower(basename(str_replace('\\', '/', $this::class))) . '::', false);
         if (isset($descriptor['subquery'])) {
             $this->subquery = new SelectStatement($descriptor['subquery']['descriptor'], $this->expression);
+            $this->subquery->getMetadata()->set('quoteIdentifier', $this->quote_identifier !== QuotesEnum::NONE);
+            $this->subquery->getMetadata()->set('quoteType', $this->quote_identifier);
             $this->subquery->setValues($descriptor['subquery']['arguments'] ?? []);
         }
 

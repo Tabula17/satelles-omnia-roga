@@ -20,6 +20,9 @@ class XmlFile implements LoaderInterface
 {
     //  private(set) ?CacheManagerInterface $cacheManager;
     private(set) string $baseDir {
+        /**
+         * @throws InvalidArgumentException
+         */
         set {
             if (!realpath($value) || !is_dir($value)) {
                 throw new InvalidArgumentException(sprintf(ExceptionDefinitions::DIRECTORY_NOT_FOUND->value, $value));

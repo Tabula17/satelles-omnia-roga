@@ -5,6 +5,7 @@ namespace Tabula17\Satelles\Omnia\Roga\Builder;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expr\Arguments;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expr\From;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\ExecuteDescriptor;
+use Tabula17\Satelles\Omnia\Roga\Descriptor\MetadataDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
 
 class ExecuteStatement implements StatementProcessorInterface
@@ -171,5 +172,9 @@ class ExecuteStatement implements StatementProcessorInterface
     public function getParam(string $placeholder): ?Param
     {
         return $this->params[$placeholder];
+    }
+    public function getMetadata(): ?MetadataDescriptor
+    {
+        return $this->statementParts->metadata ?? null;
     }
 }

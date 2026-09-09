@@ -11,12 +11,15 @@ use Tabula17\Satelles\Omnia\Roga\Builder\Expr\Select;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expr\Join;
 use Tabula17\Satelles\Omnia\Roga\Collection\ColumnCollection;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\ColumnDescriptor;
+use Tabula17\Satelles\Omnia\Roga\Descriptor\MetadataDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\SelectDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
 use Tabula17\Satelles\Utilis\Config\AbstractDescriptor;
 
 class SelectStatement implements StatementProcessorInterface
 {
+    use FormatTrait;
+
     private(set) array $modifiersStart = [];
     private(set) array $modifiersEnd = [];
     private(set) array $columns = [];
@@ -41,10 +44,12 @@ class SelectStatement implements StatementProcessorInterface
     //public bool $prettyPrintDeep = false;
     private(set) string $statementId;
     private(set) array $bindings = [];
+
     //private array $subqueries = [];
+    private bool $initialized = false;
 
     public function __construct(
-        private readonly SelectDescriptor $selectParts,
+        private readonly SelectDescriptor $statementParts,
         private readonly Expression       $expression = new Expression(),
         private readonly string           $baseAlias = 'a',
         public bool                       $prettyPrint = false,
@@ -58,7 +63,14 @@ class SelectStatement implements StatementProcessorInterface
         $this->orderBy = new OrderBy();
 
         $this->statementId = uniqid('select::', false);
+    }
 
+    private function init(): void
+    {
+        if ($this->initialized) {
+            return;
+        }
+        $this->initialized = true;
         $this->setFrom()->setJoins();
     }
 
@@ -67,61 +79,79 @@ class SelectStatement implements StatementProcessorInterface
         return $this->baseAlias . $this->countAlias++;
     }
 
-    private function setFrom(): SelectStatement
+    private function getQuote(): QuotesEnum
     {
-        if (isset($this->selectParts['from'])) {
-            $alias = $this->selectParts['from']['alias'] ?? $this->randAlias();
-            $isSubquery = isset($this->selectParts['from']['subquery']);
+        $quote = QuotesEnum::NONE;
+        if ($this->statementParts->metadata->quoteIdentifier) {
+            $quote = $this->statementParts->metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
+        }
+        return $quote;
+    }
+
+    private function setFrom(): self
+    {
+        $quote = $this->getQuote();
+        $applyQuote = $quote !== QuotesEnum::NONE;
+
+        if (isset($this->statementParts['from'])) {
+            $alias = $this->statementParts['from']['alias'] ?? $this->randAlias();
+            $isSubquery = isset($this->statementParts['from']['subquery']);
             if ($isSubquery) {
-//                   var_dump($this->selectParts['from']['subquery']);
-                $table = new SelectStatement($this->selectParts['from']['subquery']['descriptor'] ?? $this->selectParts['from']['subquery'], $this->expression);
-                $table->setValues($this->selectParts['from']['subquery']['arguments'] ?? []);
+                $subQDescriptor = $this->statementParts['from']['subquery']['descriptor'] ?? $this->statementParts['from']['subquery'];
+                $table = new SelectStatement(
+                    $subQDescriptor,
+                    $this->expression,
+                );
+                $table->statementParts->metadata->set('quoteIdentifier', $applyQuote);
+                $table->statementParts->metadata->set('quoteType', $quote);
+                $table->setValues($this->statementParts['from']['subquery']['arguments'] ?? []);
                 $table->prettyPrint = $this->prettyPrint && $this->prettyPrintDeep;
                 //$this->subqueries[$table->statementId] = $table;
                 // SQ-> process!!
                 $this->elevateSubqueryParams($table);
             } else {
-                $table = $this->selectParts['from']['table'] ?? $this->selectParts['from']['name'];
+                $table = $this->statementParts['from']['table'] ?? $this->statementParts['from']['name'];
+                $table = $this->quoteIdentifier($table, $quote);
             }
 
             $this->from = new From(
                 table: $table,
-                alias: $alias,
+                alias: $this->quoteIdentifier($alias, $quote),
                 isSubquery: $isSubquery
             );
-            if (isset($this->selectParts['from']['columns'])) {
-                $this->setColumns($this->selectParts['from']['columns'], $alias);
+            if (isset($this->statementParts['from']['columns'])) {
+                $this->setColumns($this->statementParts['from']['columns'], $alias);
             }
         }
-        if (isset($this->selectParts['distinct'])) {
-            $this->modifiersStart['distinct'] = $this->selectParts['distinct'];
+        if (isset($this->statementParts['distinct'])) {
+            $this->modifiersStart['distinct'] = $this->statementParts['distinct'];
         }
-        if (isset($this->selectParts['all'])) {
-            $this->modifiersStart['all'] = $this->selectParts['all'];
+        if (isset($this->statementParts['all'])) {
+            $this->modifiersStart['all'] = $this->statementParts['all'];
         }
-        if (isset($this->selectParts['top']) && $this->selectParts['top'] > 0) {
-            $this->modifiersStart['top'] = $this->selectParts['top'];
+        if (isset($this->statementParts['top']) && $this->statementParts['top'] > 0) {
+            $this->modifiersStart['top'] = $this->statementParts['top'];
         }
-        if (isset($this->selectParts['forUpdate'])) {
-            $this->modifiersEnd['forUpdate'] = $this->selectParts['forUpdate'];
+        if (isset($this->statementParts['forUpdate'])) {
+            $this->modifiersEnd['forUpdate'] = $this->statementParts['forUpdate'];
         }
-        if (isset($this->selectParts['lockInShareMode'])) {
-            $this->modifiersEnd['lockInShareMode'] = $this->selectParts['lockInShareMode'];
+        if (isset($this->statementParts['lockInShareMode'])) {
+            $this->modifiersEnd['lockInShareMode'] = $this->statementParts['lockInShareMode'];
         }
-        if (isset($this->selectParts['forShare'])) {
-            $this->modifiersEnd['forShare'] = $this->selectParts['forShare'];
+        if (isset($this->statementParts['forShare'])) {
+            $this->modifiersEnd['forShare'] = $this->statementParts['forShare'];
         }
-        if (isset($this->selectParts['forNoKeyUpdate'])) {
-            $this->modifiersEnd['forNoKeyUpdate'] = $this->selectParts['forNoKeyUpdate'];
+        if (isset($this->statementParts['forNoKeyUpdate'])) {
+            $this->modifiersEnd['forNoKeyUpdate'] = $this->statementParts['forNoKeyUpdate'];
         }
-        if (isset($this->selectParts['forKeyShare'])) {
-            $this->modifiersEnd['forKeyShare'] = $this->selectParts['forKeyShare'];
+        if (isset($this->statementParts['forKeyShare'])) {
+            $this->modifiersEnd['forKeyShare'] = $this->statementParts['forKeyShare'];
         }
-        if (isset($this->selectParts['forKeyNoWait'])) {
-            $this->modifiersEnd['forKeyNoWait'] = $this->selectParts['forKeyNoWait'];
+        if (isset($this->statementParts['forKeyNoWait'])) {
+            $this->modifiersEnd['forKeyNoWait'] = $this->statementParts['forKeyNoWait'];
         }
-        if (isset($this->selectParts['skipLocked'])) {
-            $this->modifiersEnd['skipLocked'] = $this->selectParts['skipLocked'];
+        if (isset($this->statementParts['skipLocked'])) {
+            $this->modifiersEnd['skipLocked'] = $this->statementParts['skipLocked'];
         }
 
         return $this;
@@ -138,8 +168,8 @@ class SelectStatement implements StatementProcessorInterface
 
     private function setJoins(): SelectStatement
     {
-        if (isset($this->selectParts['joins'])) {
-            foreach ($this->selectParts['joins'] as $join) {
+        if (isset($this->statementParts['joins'])) {
+            foreach ($this->statementParts['joins'] as $join) {
                 $alias = $this->join($join);
                 if (isset($join['columns'])) {
                     $this->setColumns($join['columns'], $alias);
@@ -151,9 +181,14 @@ class SelectStatement implements StatementProcessorInterface
 
     private function join($join): string
     {
+        $quote = $this->getQuote();
+        $applyQuote = $quote !== QuotesEnum::NONE;
         if (isset($join['subquery']) && (is_array($join['subquery']) || $join['subquery']['descriptor'] instanceof SelectDescriptor)) {
             $table = new self($join['subquery']['descriptor'], $this->expression);
+            $table->statementParts->metadata->set('quoteIdentifier', $applyQuote);
+            $table->statementParts->metadata->set('quoteType', $quote);
             $table->setValues($join['subquery']['arguments'] ?? []);
+
             //$this->subqueries[$table->statementId] = $table;
             // SQ-> process!!
             $table->prettyPrint = $this->prettyPrint && $this->prettyPrintDeep;
@@ -178,20 +213,26 @@ class SelectStatement implements StatementProcessorInterface
     /**
      * Sets the columns for the current object instance.
      *
-     * @param array $columns An array of columns to be processed and added. Each column should be an associative array, potentially containing a 'subqueriesForPath' key or other column metadata.
+     * @param ColumnCollection $columns An array of columns to be processed and added. Each column should be an associative array, potentially containing a 'subqueriesForPath' key or other column metadata.
      * @param string|null $tableAlias An optional table alias to associate with the columns, used when no 'subqueriesForPath' is present in a column definition.
      * @return void
      * @throws ConfigException
      */
     private function setColumns(ColumnCollection $columns, ?string $tableAlias): void
     {
+
+        $quote = $this->getQuote();
         //$this->columns = $columns;
         foreach ($columns as $columnConfig) {
             /* if (isset($columnConfig['subqueriesForPath'])) {
                  $columnConfig['subqueriesForPath'] = new self($columnConfig['subqueriesForPath'], $this->expression);
              }*/
             $columnConfig['tableAlias'] = $tableAlias;
-            $column = new Column($columnConfig instanceof AbstractDescriptor ? $columnConfig : new ColumnDescriptor($columnConfig), $this->expression);
+            $column = new Column(
+                descriptor: $columnConfig instanceof AbstractDescriptor ? $columnConfig : new ColumnDescriptor($columnConfig),
+                expression: $this->expression,
+                quote_identifier: $quote
+            );
             $this->columns[$column->columnId] = $column; //$this->processColumn($colExpression);
 
             foreach ($column->params as $param) {
@@ -215,6 +256,7 @@ class SelectStatement implements StatementProcessorInterface
 
     public function getRequiredParams(): array
     {
+        $this->init();
         $params = [];
         /**
          * var Param $param;
@@ -229,6 +271,7 @@ class SelectStatement implements StatementProcessorInterface
 
     public function getOptionalParams(): array
     {
+        $this->init();
         $params = [];
         /**
          * var Param $param;
@@ -243,6 +286,7 @@ class SelectStatement implements StatementProcessorInterface
 
     public function getParams(): array
     {
+        $this->init();
         return $this->params;
     }
 
@@ -253,6 +297,7 @@ class SelectStatement implements StatementProcessorInterface
 
     public function setValues(array $values): SelectStatement
     {
+        $this->init();
         foreach ($values as $placeholder => $value) {
             if (!str_starts_with($placeholder, ':')) {
                 $placeholder = ':' . $placeholder;
@@ -265,6 +310,9 @@ class SelectStatement implements StatementProcessorInterface
 
     public function setValue(string $placeholder, mixed $value): SelectStatement
     {
+        $this->init();
+        $quote = $this->getQuote();
+        $applyQuote = $quote !== QuotesEnum::NONE;
         if (!str_starts_with($placeholder, ':')) {
             $placeholder = ':' . $placeholder;
         }
@@ -275,6 +323,8 @@ class SelectStatement implements StatementProcessorInterface
                 $this->bindings[$placeholder] = $this->params[$placeholder]->getValue();
             }
             if (isset($this->params[$placeholder]->subquery) && $this->params[$placeholder]->subquery instanceof self) {
+                $this->params[$placeholder]->subquery->statementParts->metadata->set('quoteIdentifier', $applyQuote);
+                $this->params[$placeholder]->subquery->statementParts->metadata->set('quoteType', $quote);
                 $this->params[$placeholder]->subquery->setValues($this->values);
                 $this->params[$placeholder]->subquery->prettyPrint = $this->prettyPrint && $this->prettyPrintDeep;
                 $this->elevateSubqueryParams($this->params[$placeholder]->subquery);
@@ -285,22 +335,26 @@ class SelectStatement implements StatementProcessorInterface
 
     public function getValue(string $placeholder): mixed
     {
+        $this->init();
         return $this->values[$placeholder] ?? null;
     }
 
     public function removeValue(string $placeholder): SelectStatement
     {
+        $this->init();
         unset($this->values[$placeholder], $this->bindings[$placeholder]);
         return $this;
     }
 
     public function getValues(): array
     {
+        $this->init();
         return $this->values;
     }
 
     public function hasValue(string $placeholder): bool
     {
+        $this->init();
         return isset($this->values[$placeholder]);
     }
 
@@ -309,7 +363,7 @@ class SelectStatement implements StatementProcessorInterface
      */
     public function process(): SelectStatement
     {
-
+        $this->init();
         $this->selects = [];
         $this->joins = [];
         $this->ors = [];
@@ -352,7 +406,11 @@ class SelectStatement implements StatementProcessorInterface
      */
     private function processColumn(Column $column): void
     {
+        $quote = $this->getQuote();
+        $applyQuote = $quote !== QuotesEnum::NONE;
         if (isset($column->subquery) && $column->subquery instanceof self) {
+            $column->subquery->statementParts->metadata->set('quoteIdentifier', $applyQuote);
+            $column->subquery->statementParts->metadata->set('quoteType', $quote);
             $column->subquery->setValues($this->values);
             //$this->subqueries[$column->subqueriesForPath->statementId] = $column->subqueriesForPath;
             // SQ-> process!!
@@ -411,6 +469,7 @@ class SelectStatement implements StatementProcessorInterface
             }
         }
     }
+
     private function processCondition($condition, $colExpression): void
     {
         $condition->setColumnExpression($colExpression);
@@ -418,6 +477,9 @@ class SelectStatement implements StatementProcessorInterface
             return;
         }
         if (isset($condition->subquery) && $condition->subquery instanceof self) {
+            $quote = $this->getQuote();
+            $condition->subquery->statementParts->metadata->set('quoteIdentifier', $quote !== QuotesEnum::NONE);
+            $condition->subquery->statementParts->metadata->set('quoteType', $quote);
             $this->elevateSubqueryParams($condition->subquery);
         }
         if ($condition->combined !== null) {
@@ -510,6 +572,8 @@ class SelectStatement implements StatementProcessorInterface
 
     private function processJoins(): SelectStatement
     {
+
+        $quote = $this->getQuote();
         $this->processJoinConditions();
         foreach ($this->joinsParts as $joinDescriptor) {
             if ($joinDescriptor['subquery'] && $joinDescriptor['table'] instanceof self) {
@@ -523,11 +587,12 @@ class SelectStatement implements StatementProcessorInterface
             }
 
             $this->joins[] = new Join(
-                $joinDescriptor['type'],
-                $joinDescriptor['table'],
-                $joinDescriptor['alias'],
-                $joinDescriptor['conditionType'],
-                $joinDescriptor['conditions']
+                joinType: $joinDescriptor['type'],
+                join: $joinDescriptor['table'],
+                alias: $joinDescriptor['alias'],
+                conditionType: $joinDescriptor['conditionType'],
+                condition: $joinDescriptor['conditions'],
+                quote_identifier: $quote
             );
         }
         return $this;
@@ -594,7 +659,7 @@ class SelectStatement implements StatementProcessorInterface
         return $this;
     }
 
-    private function processGroupBy(): SelectStatement
+    private function processGroupBy(): self
     {
         if (count($this->groupBys) > 0) {
             //echo 'GROUP BYS: ', implode(', ', $this->groupBys), "\n";
@@ -690,5 +755,10 @@ class SelectStatement implements StatementProcessorInterface
     public function getParam(string $placeholder): ?Param
     {
         return $this->params[$placeholder];
+    }
+
+    public function getMetadata(): ?MetadataDescriptor
+    {
+        return $this->statementParts->metadata ?? null;
     }
 }

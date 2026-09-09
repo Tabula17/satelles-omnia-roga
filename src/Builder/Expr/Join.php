@@ -19,13 +19,17 @@
 
 namespace Tabula17\Satelles\Omnia\Roga\Builder\Expr;
 
+use Tabula17\Satelles\Omnia\Roga\Builder\FormatTrait;
 use Tabula17\Satelles\Omnia\Roga\Builder\Keywords;
+use Tabula17\Satelles\Omnia\Roga\Builder\QuotesEnum;
 
 /**
  * Expression class for SQL join.
  */
 class Join
 {
+    use FormatTrait;
+
     /**
      * @var string
      */
@@ -43,7 +47,11 @@ class Join
             return $this->join;
         }
     }
-
+    public bool $isSubquery {
+        get {
+            return str_starts_with($this->join, '(') && str_ends_with($this->join, ')');
+        }
+    }
     /**
      * @var ?string
      */
@@ -78,11 +86,18 @@ class Join
      * @param string|null $conditionType The condition type constant. Either ON or WITH.
      * @param array|string|null $condition The condition for the join.
      */
-    public function __construct(string $joinType, string $join, ?string $alias = null, ?string $conditionType = null, array|string|null $condition = null)
+    public function __construct(
+        string             $joinType,
+        string             $join,
+        ?string            $alias = null,
+        ?string            $conditionType = null,
+        array|string|null  $condition = null,
+        public ?QuotesEnum $quote_identifier = QuotesEnum::DOUBLE_QUOTE
+    )
     {
         $this->joinType = $joinType;
         $this->join = $join;
-        $this->alias = $alias;
+        $this->alias = $this->quote_identifier->quote($alias);
         $this->conditionType = $conditionType;
         $this->condition = $condition;
     }
@@ -92,7 +107,11 @@ class Join
      */
     public function __toString(): string
     {
-        $join = [Keywords::fromName($this->joinType)->value, Keywords::JOIN->value, $this->join];
+        $joinTable = $this->join;
+        if (!$this->isSubquery) {
+            $joinTable = $this->quoteIdentifier($joinTable, $this->quote_identifier);
+        }
+        $join = [Keywords::fromName($this->joinType)->value, Keywords::JOIN->value, $joinTable];
         if ($this->alias) {
             $join[] = $this->alias;
         }
@@ -100,7 +119,7 @@ class Join
             $join[] = Keywords::fromName($this->conditionType)->value;
             if (is_array($this->condition)) {
                 $join[] = implode(' ' . Keywords::AND->value . ' ', $this->condition);
-            }else {
+            } else {
                 $join[] = $this->condition;
             }
         }

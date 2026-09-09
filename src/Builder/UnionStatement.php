@@ -2,6 +2,7 @@
 
 namespace Tabula17\Satelles\Omnia\Roga\Builder;
 
+use Tabula17\Satelles\Omnia\Roga\Descriptor\MetadataDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\UnionDescriptor;
 
 class UnionStatement implements StatementProcessorInterface
@@ -153,5 +154,9 @@ class UnionStatement implements StatementProcessorInterface
     public function hasValue(string $placeholder): bool
     {
         return isset($this->values[$placeholder]);
+    }
+    public function getMetadata(): ?MetadataDescriptor
+    {
+        return $this->statementParts->metadata ?? null;
     }
 }

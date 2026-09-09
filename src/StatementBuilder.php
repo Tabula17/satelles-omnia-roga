@@ -14,18 +14,19 @@ use Tabula17\Satelles\Omnia\Roga\Builder\SelectStatement;
 use Tabula17\Satelles\Omnia\Roga\Builder\StatementProcessorInterface;
 use Tabula17\Satelles\Omnia\Roga\Builder\UnionStatement;
 use Tabula17\Satelles\Omnia\Roga\Builder\UpdateStatement;
-use Tabula17\Satelles\Omnia\Roga\Collection\ModelCollection;
 use Tabula17\Satelles\Omnia\Roga\Collection\StatementCollection;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\DeleteDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\ExecuteDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\InsertDescriptor;
-use Tabula17\Satelles\Omnia\Roga\Descriptor\ModelDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\SelectDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\StatementDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\UnionDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\UpdateDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
 use Tabula17\Satelles\Omnia\Roga\Exception\ExceptionDefinitions;
+use Tabula17\Satelles\Utilis\Collection\DataModelCollection;
+use Tabula17\Satelles\Utilis\Data\DataTypes;
+use Tabula17\Satelles\Utilis\Data\ModelDescriptor;
 use Tabula17\Satelles\Utilis\Exception\RuntimeException;
 
 class StatementBuilder
@@ -97,7 +98,7 @@ class StatementBuilder
             $statement = null;
             if ($descriptor instanceof SelectDescriptor) {
                 $statement = new SelectStatement(
-                    selectParts: $descriptor,
+                    statementParts: $descriptor,
                     expression: $expression,
                     prettyPrint: false,
                     prettyPrintDeep: false
@@ -239,9 +240,9 @@ class StatementBuilder
         return $this->descriptor->type;
     }
 
-    public function getModel(): ModelCollection
+    public function getModel(): DataModelCollection
     {
-        $model = new ModelCollection();
+        $model = new DataModelCollection();
         if ($this->processor instanceof SelectStatement || $this->processor instanceof UnionStatement) {
             $this->processor->process();
             foreach ($this->processor->columns as $column) {
@@ -249,7 +250,11 @@ class StatementBuilder
                  * @var Column $column
                  */
                //var_dump($column);
-                $model->set($column->modelName(), new ModelDescriptor($column));
+                $model->set($column->modelName(), new ModelDescriptor(
+                    title: $column->modelName(),
+                    description: $column->description??$column->columnName,
+                    dataTypes: $column->type ?? DataTypes::STR,
+                ));
             }
         }
         return $model;
