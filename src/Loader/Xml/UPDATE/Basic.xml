@@ -8,6 +8,8 @@
             <allowed>1</allowed>
             <allowed>2</allowed>
             <version>1.0</version>
+            <quoteIdentifier>1</quoteIdentifier>
+            <quoteType>square</quoteType>
         </metadata>
         <to>
             <table>dbo</table>

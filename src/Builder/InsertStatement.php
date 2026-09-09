@@ -93,7 +93,7 @@ class InsertStatement implements StatementProcessorInterface
                 } else if (isset($this->select) && $this->select instanceof SelectStatement) {
                     $this->select->getMetadata()->set('quoteIdentifier', $quote !== QuotesEnum::NONE);
                     $this->select->getMetadata()->set('quoteType', $quote);
-                    $this->columns->add($column->name);
+                    $this->columns->add($this->quoteIdentifier($column->name, $quote));
                 }
                 /*
                 $param = new Param(
@@ -231,7 +231,7 @@ class InsertStatement implements StatementProcessorInterface
         $this->columns->prettyPrint = $this->prettyPrint;
         $this->placeholders->prettyPrint = $this->prettyPrint;
 
-        $insert = [Keywords::INSERT->value . ' ' . Keywords::INTO->value . ' ' . $this->quoteIdentifier($this->table, $this->getQuote()), $this->columns];
+        $insert = [Keywords::INSERT->value . ' ' . Keywords::INTO->value . ' ' . $this->quoteIdentifier(trim($this->table), $this->getQuote()), $this->columns];
         if (!empty($this->params)) {
             $insert[] = Keywords::VALUES->value;
             $insert[] = $this->placeholders;

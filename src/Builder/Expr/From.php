@@ -60,6 +60,6 @@ final readonly class From
     {
         $pre = $this->isSubquery ? '(' : '';
         $post = $this->isSubquery ? ')' : '';
-        return $pre . $this->table . $post . ' ' . $this->alias;
+        return trim($pre . $this->table . $post . ' ' . $this->alias);
     }
 }

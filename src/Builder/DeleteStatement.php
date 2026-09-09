@@ -15,7 +15,7 @@ use Tabula17\Satelles\Omnia\Roga\Exception\NotAllowedException;
 
 class DeleteStatement implements StatementProcessorInterface
 {
-
+    use FormatTrait;
 
     private(set) array $values = [];
     private(set) array $ors = [];
@@ -47,6 +47,15 @@ class DeleteStatement implements StatementProcessorInterface
 
     }
 
+    private function getQuote(): QuotesEnum
+    {
+        $quote = QuotesEnum::NONE;
+        if ($this->statementParts->metadata->quoteIdentifier) {
+            $quote = $this->statementParts->metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
+        }
+        return $quote;
+    }
+
     private function setTable(): DeleteStatement
     {
 
@@ -66,12 +75,15 @@ class DeleteStatement implements StatementProcessorInterface
         return $this;
     }
 
+    /**
+     * @throws ConfigException
+     */
     private function setColumns(): self
     {
         //echo 'SET COLUMNS -:: ', var_export($this->statementParts['into']['columns'], true), PHP_EOL;
         if (isset($this->statementParts['from']['columns'])) {
             foreach ($this->statementParts['from']['columns'] as $column) {
-                $column = new Column($column, $this->expression);
+                $column = new Column($column, $this->expression, $this->getQuote());
                 $column->process();
                 if (isset($column->params) && count($column->params) > 0) {
                     foreach ($column->params as $param) {
@@ -301,19 +313,22 @@ class DeleteStatement implements StatementProcessorInterface
     {
         return $this->values;
     }
+
     public function getBindings(): array
     {
         return $this->bindings;
     }
+
     public function hasValue(string $placeholder): bool
     {
         return isset($this->values[$placeholder]);
     }
+
     public function __toString(): string
     {
         $this->process();
         $parts = [];
-        $parts[] = Keywords::DELETE->value . " " . Keywords::FROM->value . " " . $this->table;
+        $parts[] = Keywords::DELETE->value . " " . Keywords::FROM->value . " " . $this->quoteIdentifier($this->table, $this->getQuote());
         if ($this->where->count() > 0) {
             $this->where->prettyPrint = $this->prettyPrint;
             $parts[] = Keywords::WHERE->value;
@@ -330,6 +345,7 @@ class DeleteStatement implements StatementProcessorInterface
         $char = $this->prettyPrint ? "\n" : ' ';
         return implode($char, $parts);
     }
+
     public function getMetadata(): ?MetadataDescriptor
     {
         return $this->statementParts->metadata ?? null;

@@ -8,6 +8,8 @@
             <allowed>1</allowed>
             <allowed>2</allowed>
             <version>1.2</version>
+            <quoteIdentifier>1</quoteIdentifier>
+            <quoteType>sqlsrv</quoteType>
         </metadata>
         <namedArguments>1</namedArguments>
         <argListSurrounded>0</argListSurrounded>

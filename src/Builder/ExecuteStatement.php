@@ -10,6 +10,8 @@ use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
 
 class ExecuteStatement implements StatementProcessorInterface
 {
+    use FormatTrait;
+
     private From $procedure;
     private Arguments $body;
 
@@ -43,6 +45,14 @@ class ExecuteStatement implements StatementProcessorInterface
         $this->setProcedure()->setArguments();
     }
 
+    private function getQuote(): QuotesEnum
+    {
+        $quote = QuotesEnum::NONE;
+        if ($this->statementParts->metadata->quoteIdentifier) {
+            $quote = $this->statementParts->metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
+        }
+        return $quote;
+    }
 
     private function setProcedure(): ExecuteStatement
     {
@@ -163,16 +173,17 @@ class ExecuteStatement implements StatementProcessorInterface
     public function __toString(): string
     {
         $this->process();
-        $prettyChar = $this->prettyPrint ? "\n" : '';
+        $prettyChar = $this->prettyPrint ? "\n" : ' ';
         $this->body->prettyPrint = $this->prettyPrint;
         $this->body->surrounded = $this->surroundedArgs;
-        return $this->execKeyword->value . ' ' . $prettyChar . $this->procedure . $prettyChar . $this->body;
+        return $this->execKeyword->value .  $prettyChar . $this->quoteIdentifier((string)$this->procedure, $this->getQuote()) . $prettyChar . $this->body;
     }
 
     public function getParam(string $placeholder): ?Param
     {
         return $this->params[$placeholder];
     }
+
     public function getMetadata(): ?MetadataDescriptor
     {
         return $this->statementParts->metadata ?? null;

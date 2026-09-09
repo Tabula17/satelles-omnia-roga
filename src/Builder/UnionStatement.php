@@ -24,9 +24,18 @@ class UnionStatement implements StatementProcessorInterface
         $this->unionType = $this->statementParts->unionAll ? Keywords::UNION_ALL->value : Keywords::UNION->value;
         $this->statementId = uniqid(strtolower(str_replace(' ', '', $this->unionType)) . '::', false);
         //echo 'UNION * -> ' , var_export($this->statementParts , true), "\n";
+        $quote = $this->getQuote();
         foreach ($this->statementParts->unions as $k => $part) {
             //echo 'UNION PART -> ' , var_export($part, true), "\n";
-            $this->parts[] = new SelectStatement($part, $this->expression, "u$k");
+            $statement = new SelectStatement($part, $this->expression, "u$k");
+            if(!$statement->getMetadata()){
+                $statement->overrideMetadata($this->statementParts->metadata);
+            }else{
+                $statement->getMetadata()->set('quoteIdentifier', $quote !== QuotesEnum::NONE);
+                $statement->getMetadata()->set('quoteType', $quote);
+            }
+
+            $this->parts[] =  $statement;
         }
         $params = [];
         foreach ($this->parts as $part) {
@@ -35,6 +44,15 @@ class UnionStatement implements StatementProcessorInterface
             $params[] = $part->getParams();
         }
         $this->params = array_merge(...$params);
+    }
+
+    private function getQuote(): QuotesEnum
+    {
+        $quote = QuotesEnum::NONE;
+        if ($this->statementParts->metadata->quoteIdentifier) {
+            $quote = $this->statementParts->metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
+        }
+        return $quote;
     }
 
 
@@ -75,6 +93,7 @@ class UnionStatement implements StatementProcessorInterface
     {
         return $this->bindings;
     }
+
     public function setValues(array $values): UnionStatement
     {
         foreach ($values as $placeholder => $value) {
@@ -118,10 +137,13 @@ class UnionStatement implements StatementProcessorInterface
 
     public function process(): UnionStatement
     {
+        $quote = $this->getQuote();
         /**
          * @var SelectStatement $select ;
          */
         foreach ($this->parts as $select) {
+            $select->getMetadata()->set('quoteIdentifier', $quote !== QuotesEnum::NONE);
+            $select->getMetadata()->set('quoteType', $quote);
             $select->prettyPrint = $this->prettyPrint && $this->prettyPrintDeep;
         }
         return $this;
@@ -148,13 +170,14 @@ class UnionStatement implements StatementProcessorInterface
 
     public function getValues(): array
     {
-       return $this->values;
+        return $this->values;
     }
 
     public function hasValue(string $placeholder): bool
     {
         return isset($this->values[$placeholder]);
     }
+
     public function getMetadata(): ?MetadataDescriptor
     {
         return $this->statementParts->metadata ?? null;

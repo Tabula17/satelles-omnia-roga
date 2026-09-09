@@ -9,6 +9,8 @@
             <allowed>2</allowed>
             <allowed>3</allowed>
             <version>1.0</version>
+            <quoteIdentifier>1</quoteIdentifier>
+            <quoteType>double_quote</quoteType>
         </metadata>
         <unionAll>true</unionAll>
         <unions>

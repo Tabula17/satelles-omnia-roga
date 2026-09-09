@@ -16,8 +16,7 @@ use Tabula17\Satelles\Omnia\Roga\Exception\ValueRequiredException;
 
 class UpdateStatement implements StatementProcessorInterface
 {
-
-
+    use FormatTrait;
     private(set) array $values = [];
     private array $filters = [];
     private(set) array $ors = [];
@@ -50,7 +49,15 @@ class UpdateStatement implements StatementProcessorInterface
         $this->having = new Andx();
     }
 
-    private function setTable(): UpdateStatement
+    private function getQuote(): QuotesEnum
+    {
+        $quote = QuotesEnum::NONE;
+        if ($this->statementParts->metadata->quoteIdentifier) {
+            $quote = $this->statementParts->metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
+        }
+        return $quote;
+    }
+    private function setTable(): self
     {
 
         if (isset($this->statementParts['table'])) {
@@ -74,10 +81,11 @@ class UpdateStatement implements StatementProcessorInterface
      */
     private function setColumns(): void
     {
+        $quote = $this->getQuote();
         //echo 'SET COLUMNS -:: ', var_export($this->statementParts['into']['columns'], true), PHP_EOL;
         if (isset($this->statementParts['to']['columns'])) {
             foreach ($this->statementParts['to']['columns'] as $column) {
-                $column = new Column($column, $this->expression);
+                $column = new Column($column, $this->expression, $quote);
                 $column->process();
                 if (isset($column->params) && count($column->params) > 0) {
                     foreach ($column->params as $param) {
@@ -346,11 +354,16 @@ class UpdateStatement implements StatementProcessorInterface
         return $this;
     }
 
+    /**
+     * @throws NotAllowedException
+     * @throws ValueRequiredException
+     */
     public function __toString(): string
     {
+        $quote = $this->getQuote();
         $this->process();
         $parts = [];
-        $parts[] = Keywords::UPDATE->value . " " . $this->table;
+        $parts[] = Keywords::UPDATE->value . " " . $this->quoteIdentifier($this->table, $quote) ;
         $parts[] = Keywords::SET->value;
         if ($this->body->count() === 0) {
             throw new ValueRequiredException(ExceptionDefinitions::ARGUMENTS_LIST_EMPTY->value);

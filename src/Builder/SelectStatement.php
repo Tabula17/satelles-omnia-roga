@@ -761,4 +761,8 @@ class SelectStatement implements StatementProcessorInterface
     {
         return $this->statementParts->metadata ?? null;
     }
+    public function overrideMetadata(MetadataDescriptor|array $metadata): void
+    {
+        $this->statementParts->set('metadata', $metadata);
+    }
 }
