@@ -1,6 +1,12 @@
 # Documentación de Estructuras XML para Loader
 
-Este documento detalla la estructura de los archivos XML utilizados por el `Loader` para generar consultas SQL a través de la librería. Las definiciones están guiadas por las clases del espacio `Tabula17\Satelles\Omnia\Roga\Descriptor` y procesadas por las del espacio `Tabula17\Satelles\Omnia\Roga\Builder`.
+Este documento detalla la estructura de los archivos XML utilizados por el `Loader` para generar consultas SQL a través de la librería. 
+Las definiciones están guiadas por las clases del espacio `Tabula17\Satelles\Omnia\Roga\Descriptor` y procesadas por las del espacio `Tabula17\Satelles\Omnia\Roga\Builder`.
+
+No es obligatorio utilizar estas clases para generar consultas. 
+Pude construir otra manera de definir las mismas (por ej. mediante `Json`,`Arrays`, `YAML`, etc.). 
+Solo debe respetar las estructuras definidas por las clases del espacio `Tabula17\Satelles\Omnia\Roga\Descriptor` y aplicar la interfaz ```Tabula17\Satelles\Omnia\Roga\LoaderInterface``` a la clase resultante.
+
 
 ## Estructura General
 

@@ -46,7 +46,11 @@ class StatementBuilder
      * @return void
      * @throws \JsonException
      */
-    public function __construct(private readonly string $statementName, public LoaderInterface $loader, bool $reload = false, private readonly ?LoggerInterface $logger = null)
+    public function __construct(
+        private readonly string $statementName,
+        public LoaderInterface $loader,
+        bool $reload = false,
+        private readonly ?LoggerInterface $logger = null)
     {
         $this->collection = $this->loader->getStatementCollection($statementName, $reload);
     }
