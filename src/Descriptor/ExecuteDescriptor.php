@@ -30,6 +30,5 @@ class ExecuteDescriptor extends StatementDescriptor
             }
         }
     }
-    protected(set) ?bool $quoteIdentifier;
 
 }

@@ -58,5 +58,4 @@ class TableDescriptor extends AbstractDescriptor
             }
         }
     }
-    protected(set) ?bool $quoteIdentifier;
 }
