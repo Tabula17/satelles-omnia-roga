@@ -14,6 +14,7 @@ use Tabula17\Satelles\Omnia\Roga\Builder\Param;
 use Tabula17\Satelles\Omnia\Roga\Builder\ParamTypes;
 use Tabula17\Satelles\Omnia\Roga\Builder\QuotesEnum;
 use Tabula17\Satelles\Omnia\Roga\Builder\SelectStatement;
+use Tabula17\Satelles\Omnia\Roga\Builder\UnionStatement;
 use Tabula17\Satelles\Omnia\Roga\Collection\StatementCollection;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\DescriptorClasses;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\ColumnDescriptor;
@@ -21,6 +22,7 @@ use Tabula17\Satelles\Omnia\Roga\Descriptor\ConditionDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\ParamDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\SelectDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\SubqueryDescriptor;
+use Tabula17\Satelles\Omnia\Roga\Descriptor\UnionDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
 use Tabula17\Satelles\Omnia\Roga\Loader\XmlFile;
 use Tabula17\Satelles\Omnia\Roga\StatementBuilder;
@@ -229,6 +231,21 @@ foreach ([
     $lockStatement = new SelectStatement(new SelectDescriptor($lockDescriptor), new Expression());
     check(str_ends_with((string)$lockStatement, ' ' . $clause), "$modifier is emitted in SQL", $failures);
 }
+
+// 20. A later UNION branch must not downgrade a required parameter to optional.
+$unionBase = $loader->getStatementDescriptors('SELECT/Min')[0]->toArray();
+unset($unionBase['type'], $unionBase['metadata']['type']);
+$requiredBranch = $unionBase;
+$requiredBranch['from']['columns'][1]['conditions'][0]['required'] = 1;
+$optionalBranch = $unionBase;
+$optionalBranch['from']['columns'][1]['conditions'][0]['required'] = 0;
+$union = new UnionStatement(new UnionDescriptor([
+    'unions' => [$requiredBranch, $optionalBranch],
+    'unionAll' => false,
+]), new Expression());
+$unionRequired = array_map(static fn(Param $param): string => $param->placeholder, $union->getRequiredParams());
+check(in_array(':param_x', $unionRequired, true), 'Required UNION parameter survives merge', $failures);
+checkSame(':param_x', $union->getParam(':param_x')?->placeholder, 'UNION exposes the merged parameter', $failures);
 
 if ($failures === []) {
     echo "ALL REGRESSION TESTS PASSED\n";

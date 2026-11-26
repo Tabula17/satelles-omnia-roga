@@ -39,13 +39,17 @@ class UnionStatement implements StatementProcessorInterface
 
             $this->parts[] =  $statement;
         }
-        $params = [];
+        // The same placeholder may appear in several UNION branches. Keep one
+        // Param per placeholder, but never let a later optional branch hide a
+        // required parameter declared in an earlier branch.
         foreach ($this->parts as $part) {
-            // echo 'UNION PART ->params', $part->statementId, var_export($part->getParams(), true), "\n";
-            //$this->params = array_merge($this->params, $part->getParams());
-            $params[] = $part->getParams();
+            foreach ($part->getParams() as $placeholder => $param) {
+                if (!isset($this->params[$placeholder]) ||
+                    ($param->required && !$this->params[$placeholder]->required)) {
+                    $this->params[$placeholder] = $param;
+                }
+            }
         }
-        $this->params = array_merge(...$params);
     }
 
     private function getQuote(): QuotesEnum
