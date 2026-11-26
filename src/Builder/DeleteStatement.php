@@ -17,6 +17,7 @@ class DeleteStatement implements StatementProcessorInterface
 {
     use FormatTrait;
     use BindingsTrait;
+    use CollisionTrait;
 
     private(set) array $values = [];
     private(set) array $ors = [];
@@ -148,6 +149,7 @@ class DeleteStatement implements StatementProcessorInterface
 
     private function processWhere(): DeleteStatement
     {
+        $collisions = [];
         foreach ($this->conditions as $condition) {
             if ($condition instanceof Param) {
                 if (empty($this->values[$condition->placeholder]) && $condition->onnotempty) {
@@ -164,9 +166,18 @@ class DeleteStatement implements StatementProcessorInterface
                     $this->setValue($condition->placeholder, $condition->defaultValue);
                 }
             }
-            if (!empty((string)$condition) && !$this->where->partExists((string)$condition)) {
+            $rendered = (string)$condition;
+            if ($rendered !== '') {
                 // HAVING is not valid on DELETE; grouped conditions belong in WHERE.
-                $this->where->add((string)$condition);
+                $this->assertNoCollision(
+                    $collisions,
+                    $this->collisionGroup($condition->collides, 'WHERE', (string)$condition->getColumnExpression()),
+                    $rendered,
+                    'WHERE'
+                );
+                if (!$this->where->partExists($rendered)) {
+                    $this->where->add($rendered);
+                }
             }
         }
         foreach ($this->ors as $condition) {
@@ -183,12 +194,21 @@ class DeleteStatement implements StatementProcessorInterface
                             $this->values[$c->placeholder] = $c->defaultValue;
                         }
                     }
-                    if ($c->groupCondition) {
-                        if (!$hor->partExists((string)$c)) {
-                            $hor->add((string)$c);
+                    $rendered = (string)$c;
+                    if ($rendered !== '') {
+                        $this->assertNoCollision(
+                            $collisions,
+                            $this->collisionGroup($c->collides, 'WHERE', (string)$c->getColumnExpression()),
+                            $rendered,
+                            'WHERE'
+                        );
+                        if ($c->groupCondition) {
+                            if (!$hor->partExists($rendered)) {
+                                $hor->add($rendered);
+                            }
+                        } else if (!$or->partExists($rendered)) {
+                            $or->add($rendered);
                         }
-                    } else if (!$or->partExists((string)$c)) {
-                        $or->add((string)$c);
                     }
                 }
             }

@@ -10,6 +10,7 @@ enum ExceptionDefinitions: string
     case ARGUMENTS_LIST_EMPTY = 'No se proporcionaron argumentos para ejecutar la operación';
     case CONDITION_WITHOUT_COLUMN_NAME = 'No se proporcionó el nombre de columna para generar la condición';
     case CONDITION_WITHOUT_ARGUMENTS = 'No se proporcionaron argumentos suficientes para generar la condición';
+    case COLLIDING_FILTERS = 'No pueden activarse simultáneamente filtros excluyentes en "%s" (grupo "%s"): "%s" y "%s".';
     case PARAM_WITHOUT_NAME = 'No se identificó el nombre del parámetro a procesar';
     case PARAM_VALUE_EXPECTED = 'No se especificó el valor del parámetro "%s" y es requerido para ejecutar la consulta';
     case PARAM_COLUMN_NAME_EXPECTED = 'No se proporcionó el nombre de columna para aplicar al parámetro "%s"';

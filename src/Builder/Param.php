@@ -105,6 +105,7 @@ class Param implements Paraminterface
     private mixed $value;
     private(set) bool $needColumnExpression;
     private(set) ?int $combined;
+    private(set) bool|string|null $collides = null;
     /**
      * @var mixed|string
      */
@@ -170,6 +171,7 @@ class Param implements Paraminterface
         $this->paramName = $this->descriptor['paramName'] ?? null;
         $this->paramTemplate = $this->descriptor['paramTemplate'] ?? null;
         $this->combined = $this->descriptor['combined'] ?? null;
+        $this->collides = $this->descriptor['collides'] ?? null;
         $this->groupCondition = $this->descriptor['having'] ?? 0;
         $this->onempty = isset($this->descriptor['onempty']) && (int)$this->descriptor['onempty'] === 1;
         $this->onnotempty = isset($this->descriptor['onnotempty']) && (int)$this->descriptor['onnotempty'] === 1;

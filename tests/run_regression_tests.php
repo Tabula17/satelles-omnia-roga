@@ -256,16 +256,51 @@ check(str_contains($tagsSql, 'CAST("t"."fecha" AS DATE)'), 'column template is e
 check(str_contains($tagsSql, 'GROUP BY "t"."id"'), 'grouped column is emitted', $failures);
 check(str_ends_with($tagsSql, 'FOR SHARE SKIP LOCKED'), 'documented lock modifiers are emitted', $failures);
 
-$tagsBuilder->setValues(['estado' => 'ACT', 'ids' => [1, 2]]);
+$tagsBuilder->setValues(['estado' => 'ACT']);
 $tagsSql = (string)$tagsBuilder->getStatement();
 check(str_contains($tagsSql, '"t"."estado" = :estado'), 'documented parameter is bound', $failures);
-check(str_contains($tagsSql, 'IN(:ids0, :ids1)'), 'array parameter is expanded', $failures);
+check(str_contains($tagsSql, 'IN(:ids0, :ids1)') === false, 'inactive collision does not render', $failures);
 checkSame(
-    [':estado' => 'ACT', ':ids0' => 1, ':ids1' => 2],
+    [':estado' => 'ACT'],
     $tagsBuilder->getBindings(),
     'documented bindings match the rendered placeholders',
     $failures
 );
+
+$tagsBuilder->setValues(['estado' => 'ACT', 'ids' => [1, 2]]);
+try {
+    (string)$tagsBuilder->getStatement();
+    $failures[] = 'Two colliding filters did not throw';
+} catch (ConfigException $exception) {
+    check(str_contains($exception->getMessage(), 'grupo "t.estado"'), 'collision names the affected column', $failures);
+}
+
+// 22. Named collision groups can span columns.
+$collisionDescriptor = new SelectDescriptor([
+    'metadata' => ['quoteIdentifier' => 1, 'quoteType' => 'double_quote'],
+    'from' => ['table' => ['t'], 'columns' => [[
+        'name' => 'a',
+        'tableAlias' => 't',
+        'conditions' => [[
+            'name' => 'byA', 'type' => 'int', 'sqlexpression' => 'eq', 'collides' => 'search',
+        ]],
+    ], [
+        'name' => 'b',
+        'tableAlias' => 't',
+        'conditions' => [[
+            'name' => 'byB', 'type' => 'int', 'sqlexpression' => 'eq', 'collides' => 'search',
+        ]],
+    ]]],
+]);
+$namedCollision = new SelectStatement($collisionDescriptor);
+$namedCollision->setValues(['byA' => 1]);
+check(str_contains((string)$namedCollision, '"a" = :byA'), 'named collision allows one active filter', $failures);
+try {
+    (string)$namedCollision->setValues(['byA' => 1, 'byB' => 2]);
+    $failures[] = 'Two filters in the same named group did not throw';
+} catch (ConfigException $exception) {
+    check(str_contains($exception->getMessage(), 'grupo "search"'), 'named collision identifies the group', $failures);
+}
 
 if ($failures === []) {
     echo "ALL REGRESSION TESTS PASSED\n";

@@ -14,6 +14,28 @@ class ConditionDescriptor extends AbstractDescriptor
     protected(set) bool $usecolexpression = false;
     protected(set) ?bool $having;
     protected(set) ?int $combined;
+    protected(set) bool|string|null $collides = null {
+        set(bool|int|string|null $value) {
+            if ($value === null || $value === false || $value === '' || $value === 0 || $value === '0') {
+                $this->collides = null;
+                return;
+            }
+            if ($value === true || $value === 1 || $value === '1') {
+                $this->collides = true;
+                return;
+            }
+            $normalized = strtolower(trim((string)$value));
+            if (in_array($normalized, ['true', 'yes', 'si', '*'], true)) {
+                $this->collides = true;
+                return;
+            }
+            if (in_array($normalized, ['false', 'no'], true)) {
+                $this->collides = null;
+                return;
+            }
+            $this->collides = trim((string)$value);
+        }
+    }
     protected(set) ?string $tableAlias;
     protected(set) ?string $columnName;
     protected(set) SubqueryDescriptor $subquery {

@@ -206,11 +206,14 @@ Un `<condition>` con `<name>` se trata como parámetro bindable; sin `<name>` se
 | `<paramTemplate>` | Plantilla que reemplaza `:colname` y `:param`. El valor se entrecomilla automáticamente salvo en tipos bool/null/numeric/expression. |
 | `<subqueryAsArgument>` | `1` inyecta la subconsulta como argumento en lugar de envolverla entre paréntesis. |
 | `<combined>` | Agrupa condiciones con `OR` bajo el mismo número de grupo. |
+| `<collides>` | Marca filtros mutuamente excluyentes. `1` agrupa por columna; un texto agrupa por nombre (incluso entre columnas). |
 | `<having>` | `1` envía la condición a `HAVING` en lugar de `WHERE`. |
 | `<columnName>` | Columna explícita para una condición sin parámetro; admite `<tableAlias>` previo. |
 | `<arguments>` | Argumentos extra para `<sqlexpression>`. |
 | `<subquery>` | Subconsulta asociada a la condición. |
 | `<description>` | Texto descriptivo; no cambia el SQL. |
+
+Con `<collides>1</collides>`, dos condiciones activas sobre la misma columna no pueden renderizarse juntas: al intentar generar el SQL se lanza `ConfigException`. Si se usa un texto, por ejemplo `<collides>busqueda</collides>`, la exclusión se aplica a todas las condiciones activas con ese nombre, aunque pertenezcan a columnas distintas. Las condiciones inactivas no cuentan como colisión.
 
 Valores habituales de `<sqlexpression>`:
 
@@ -426,7 +429,7 @@ El loader detecta ciclos entre subconsultas y lanza una excepción de configurac
 
 ## Ejemplos
 
-- `src/Loader/Xml/SELECT/Tags.xml`: catálogo compacto de modificadores, columnas literales, plantillas, agrupación, orden, `IN`, `combined`, `having` y modificadores de bloqueo.
+- `src/Loader/Xml/SELECT/Tags.xml`: catálogo compacto de modificadores, columnas literales, plantillas, agrupación, orden, `IN`, `collides`, `combined`, `having` y modificadores de bloqueo.
 - `src/Loader/Xml/SELECT/Basic.xml`: variantes por `allowed` y subconsulta con `notexists`.
 - `src/Loader/Xml/SELECT/Complex.xml`: joins, subconsultas anidadas y múltiples variantes.
 - `src/Loader/Xml/SELECT/Union.xml`: uniones por ruta y definiciones inline.

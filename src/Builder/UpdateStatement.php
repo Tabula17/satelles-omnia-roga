@@ -18,6 +18,7 @@ class UpdateStatement implements StatementProcessorInterface
 {
     use FormatTrait;
     use BindingsTrait;
+    use CollisionTrait;
     private(set) array $values = [];
     private array $filters = [];
     private(set) array $ors = [];
@@ -166,6 +167,7 @@ class UpdateStatement implements StatementProcessorInterface
 
     private function processWhere(): void
     {
+        $collisions = [];
         foreach ($this->conditions as $condition) {
             if ($condition instanceof Param) {
                 if (empty($this->values[$condition->placeholder]) && $condition->onnotempty) {
@@ -182,13 +184,25 @@ class UpdateStatement implements StatementProcessorInterface
                     $this->setValue($condition->placeholder, $condition->defaultValue);
                 }
             }
-            if (!empty((string)$condition)) {
+            $rendered = (string)$condition;
+            if ($rendered !== '') {
+                $scope = $condition->groupCondition ? 'HAVING' : 'WHERE';
+                $this->assertNoCollision(
+                    $collisions,
+                    $this->collisionGroup(
+                        $condition->collides,
+                        $scope,
+                        (string)$condition->getColumnExpression()
+                    ),
+                    $rendered,
+                    $scope
+                );
                 if ($condition->groupCondition) {
-                    if (!$this->having->partExists((string)$condition)) {
-                        $this->having->add((string)$condition);
+                    if (!$this->having->partExists($rendered)) {
+                        $this->having->add($rendered);
                     }
-                } else if (!$this->where->partExists((string)$condition)) {
-                    $this->where->add((string)$condition);
+                } else if (!$this->where->partExists($rendered)) {
+                    $this->where->add($rendered);
                 }
             }
         }
@@ -206,12 +220,26 @@ class UpdateStatement implements StatementProcessorInterface
                             $this->values[$c->placeholder] = $c->defaultValue;
                         }
                     }
-                    if ($c->groupCondition) {
-                        if (!$hor->partExists((string)$c)) {
-                            $hor->add((string)$c);
+                    $rendered = (string)$c;
+                    if ($rendered !== '') {
+                        $scope = $c->groupCondition ? 'HAVING' : 'WHERE';
+                        $this->assertNoCollision(
+                            $collisions,
+                            $this->collisionGroup(
+                                $c->collides,
+                                $scope,
+                                (string)$c->getColumnExpression()
+                            ),
+                            $rendered,
+                            $scope
+                        );
+                        if ($c->groupCondition) {
+                            if (!$hor->partExists($rendered)) {
+                                $hor->add($rendered);
+                            }
+                        } else if (!$or->partExists($rendered)) {
+                            $or->add($rendered);
                         }
-                    } else if (!$or->partExists((string)$c)) {
-                        $or->add((string)$c);
                     }
                 }
             }

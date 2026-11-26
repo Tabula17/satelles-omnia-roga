@@ -69,11 +69,13 @@
                             <name>estado</name>
                             <type>string</type>
                             <sqlexpression>eq</sqlexpression>
+                            <collides>1</collides>
                         </condition>
                         <condition>
                             <name>ids</name>
                             <type>array_int</type>
                             <sqlexpression>in</sqlexpression>
+                            <collides>1</collides>
                         </condition>
                         <condition>
                             <sqlexpression>isnotnull</sqlexpression>

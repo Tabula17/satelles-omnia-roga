@@ -14,6 +14,7 @@ class Condition
     private(set) string $columnExpression;
     private(set) bool $needColumnExpression;
     private(set) ?int $combined;
+    private(set) bool|string|null $collides = null;
     /**
      * @var mixed|string
      */
@@ -56,6 +57,7 @@ class Condition
         $this->sqlexpression = $this->descriptor['sqlexpression'] ?? 'eq';
         $this->needColumnExpression = isset($this->descriptor['usecolexpression']) && (bool)$this->descriptor['usecolexpression'] === true;
         $this->combined = $this->descriptor['combined'] ?? null;
+        $this->collides = $this->descriptor['collides'] ?? null;
         $this->groupCondition = $this->descriptor['having'] ?? 0;
         //$this::class;
         $this->conditionId = uniqid(strtolower(basename(str_replace('\\', '/', $this::class))) . '::', false);
