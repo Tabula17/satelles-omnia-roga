@@ -19,6 +19,7 @@ use Tabula17\Satelles\Omnia\Roga\Collection\JoinCollection;
  * - $top: An integer representing the number of rows to return using the TOP clause.
  * - $forUpdate: A boolean flag indicating if the FOR UPDATE clause is applied.
  * - $forShare: A boolean flag indicating if the FOR SHARE clause is applied.
+ * - $lockInShareMode: A boolean flag for the MySQL LOCK IN SHARE MODE clause.
  * - $forNoKeyUpdate: A boolean flag for the FOR NO KEY UPDATE clause.
  * - $forKeyShare: A boolean flag for the FOR KEY SHARE clause.
  * - $forKeyNoShare: A boolean flag for the FOR KEY NO SHARE clause.
@@ -36,6 +37,8 @@ use Tabula17\Satelles\Omnia\Roga\Collection\JoinCollection;
  * - $forShareKeyNoShare: A boolean flag for FOR SHARE with KEY NO SHARE intent.
  * - $forShareNoKey: A boolean flag for FOR SHARE with NO KEY intent.
  * - $forShareKey: A boolean flag for FOR SHARE with general key operations.
+ * - $forKeyNoWait: A boolean flag to append NOWAIT to a row-locking clause.
+ * - $skipLocked: A boolean flag to append SKIP LOCKED to a row-locking clause.
  * - $from: A TableDescriptor instance representing the table or data source for the SELECT.
  * - $joins: A JoinCollection instance containing join operations for the SELECT statement.
  * - $offset: An integer defining the number of rows to skip in the result set.
@@ -48,6 +51,7 @@ class SelectDescriptor extends StatementDescriptor
     protected(set) int $top = 0;
     protected(set) bool $forUpdate = false;
     protected(set) bool $forShare = false;
+    protected(set) bool $lockInShareMode = false;
     protected(set) bool $forNoKeyUpdate = false;
     protected(set) bool $forKeyShare = false;
     protected(set) bool $forKeyNoShare = false;
@@ -65,6 +69,8 @@ class SelectDescriptor extends StatementDescriptor
     protected(set) bool $forShareKeyNoShare = false;
     protected(set) bool $forShareNoKey = false;
     protected(set) bool $forShareKey = false;
+    protected(set) bool $forKeyNoWait = false;
+    protected(set) bool $skipLocked = false;
 
     protected(set) TableDescriptor $from {
         set(array|TableDescriptor $value) {

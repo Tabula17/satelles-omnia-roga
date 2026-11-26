@@ -7,6 +7,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 use Tabula17\Satelles\Omnia\Roga\Builder\Column;
 use Tabula17\Satelles\Omnia\Roga\Builder\Condition;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expression;
+use Tabula17\Satelles\Omnia\Roga\Builder\Keywords;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expr\Andx;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expr\OrderBy;
 use Tabula17\Satelles\Omnia\Roga\Builder\Param;
@@ -209,6 +210,25 @@ $normalColumn = new Column(
     QuotesEnum::DOUBLE_QUOTE
 );
 checkSame('"t"."c"', (string)$normalColumn, 'regular columns still include the alias', $failures);
+
+// 19. SELECT lock modifiers are mapped to real SQL clauses.
+$lockBase = $loader->getStatementDescriptors('SELECT/Min')[0]->toArray();
+unset($lockBase['type'], $lockBase['metadata']['type']);
+foreach ([
+    'forUpdate' => 'FOR UPDATE',
+    'forShare' => 'FOR SHARE',
+    'forNoKeyUpdate' => 'FOR NO KEY UPDATE',
+    'forKeyShare' => 'FOR KEY SHARE',
+    'lockInShareMode' => 'LOCK IN SHARE MODE',
+    'skipLocked' => 'SKIP LOCKED',
+    'forKeyNoWait' => 'NOWAIT',
+] as $modifier => $clause) {
+    checkSame($clause, Keywords::fromName($modifier)->value, "$modifier is mapped", $failures);
+    $lockDescriptor = $lockBase;
+    $lockDescriptor[$modifier] = true;
+    $lockStatement = new SelectStatement(new SelectDescriptor($lockDescriptor), new Expression());
+    check(str_ends_with((string)$lockStatement, ' ' . $clause), "$modifier is emitted in SQL", $failures);
+}
 
 if ($failures === []) {
     echo "ALL REGRESSION TESTS PASSED\n";

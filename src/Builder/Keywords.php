@@ -75,6 +75,12 @@ enum Keywords: string
     case LAG = 'LAG';
     case LEAD = 'LEAD';
     case FORUPDATE = 'FOR UPDATE';
+    case FORSHARE = 'FOR SHARE';
+    case FORNOKEYUPDATE = 'FOR NO KEY UPDATE';
+    case FORKEYSHARE = 'FOR KEY SHARE';
+    case LOCKINSHAREMODE = 'LOCK IN SHARE MODE';
+    case SKIPLOCKED = 'SKIP LOCKED';
+    case NOWAIT = 'NOWAIT';
     case _none = '';
 
     public static function fromName(string $value): self
@@ -159,6 +165,12 @@ enum Keywords: string
             'lag' => self::LAG,
             'lead' => self::LEAD,
             'for update' => self::FORUPDATE,
+            'for share' => self::FORSHARE,
+            'for no key update' => self::FORNOKEYUPDATE,
+            'for key share' => self::FORKEYSHARE,
+            'lock in share mode' => self::LOCKINSHAREMODE,
+            'skip locked' => self::SKIPLOCKED,
+            'for key no wait' => self::NOWAIT,
             default => self::_none
 
         };

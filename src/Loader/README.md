@@ -38,7 +38,7 @@ Define información contextual para la carga y ejecución de la sentencia.
 | `<variant>` | (Opcional) Variante específica de la sentencia. |
 | `<client>` | (Opcional) Identificador de cliente. |
 | `<quoteIdentifier>` | Booleano (0/1) para indicar si se deben entrecomillar los identificadores. |
-| `<quoteType>` | Tipo de comillas para los identificadores. Definidos por el enum `QuotesEnum` (simple,double,backtick,squarebraces). |
+| `<quoteType>` | Alias o carácter literal de `QuotesEnum`: `double`/`double_quote`/`ansi`/`postgresql`, `backtick`/`mysql`, `single_quote`/`single`, `square_bracket`/`square`/`sqlsrv`, `brackets` o `braces`. Vacío desactiva el entrecomillado. |
 
 ---
 
