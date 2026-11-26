@@ -4,10 +4,21 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
+use Psr\Log\AbstractLogger;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
 use Tabula17\Satelles\Omnia\Roga\Exception\InvalidArgumentException;
 use Tabula17\Satelles\Omnia\Roga\Loader\XmlFile;
 use Tabula17\Satelles\Utilis\Cache\CacheManagerInterface;
+
+final class CollectingLogger extends AbstractLogger
+{
+    public array $records = [];
+
+    public function log($level, $message, array $context = []): void
+    {
+        $this->records[] = [(string)$level, (string)$message];
+    }
+}
 
 final class ArrayCacheStub implements CacheManagerInterface
 {
@@ -101,6 +112,34 @@ try {
 } catch (ConfigException) {
     check(true, 'Circular subqueries are rejected', $failures);
 }
+
+file_put_contents($root . '/base1/SELECT/SkipParent.xml', <<<'XML'
+<statements>
+    <statement>
+        <type>select</type>
+        <metadata><allowed>1</allowed><allowed>3</allowed><version>1.0</version></metadata>
+        <from>
+            <table>skip_parent</table>
+            <columns>
+                <column>
+                    <name>c</name>
+                    <subquery><path>SELECT/SingleAllowed</path></subquery>
+                </column>
+            </columns>
+        </from>
+    </statement>
+</statements>
+XML);
+$logger = new CollectingLogger();
+$skipped = (new XmlFile($root . '/base1', null, $logger))->getStatementDescriptors('SELECT/SkipParent');
+check(count($skipped) === 1, 'Tenant without a subquery variant is skipped', $failures);
+$warnings = array_values(array_filter(
+    $logger->records,
+    static fn(array $record): bool => $record[0] === 'warning'
+));
+check(count($warnings) === 1 && str_contains($warnings[0][1], '"allowed"="3"'), 'Missing subquery variant is reported precisely', $failures);
+$messages = implode(' ', array_column($logger->records, 1));
+check(!str_contains($messages, 'No se pudo resolver'), 'Missing variant is not reported as an unresolved path', $failures);
 
 if ($failures === []) {
     echo "ALL LOADER TESTS PASSED\n";

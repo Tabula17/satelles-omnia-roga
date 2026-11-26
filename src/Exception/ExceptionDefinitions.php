@@ -29,6 +29,7 @@ enum ExceptionDefinitions: string
     case INVALID_STATEMENT_STRUCTURE = 'El archivo "%s" debe contener un elemento <statements> con al menos un <statement>';
     case CIRCULAR_SUBQUERY = 'Referencia circular de subconsulta detectada en "%s"';
     case UNRESOLVED_SUBQUERY = 'No se pudo resolver la subconsulta en "%s" (%s)';
+    case SUBQUERY_VARIANT_NOT_FOUND = 'No existe una variante de la subconsulta "%s" para "%s"="%s" en "%s"';
     case POOL_SIZE_GREATER_THAN_ZERO = 'El tamaño del pool debe ser mayor que cero ';
     case POOL_NOT_FOUND = 'No se encontró el pool de conexiones "%s"';
     case POOL_CONNECTION_TIMEOUT = 'Tiempo de espera agotado para la conexión al pool de conexiones "%s" (%s segundos)';

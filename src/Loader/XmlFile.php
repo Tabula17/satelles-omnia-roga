@@ -308,6 +308,7 @@ class XmlFile implements LoaderInterface
                 foreach ((is_array($identifier) ? $identifier : [$identifier]) as $allowed) {
                     $descriptor = $statement;
                     ArrayUtilities::setArrayValueByPath($descriptor, 'metadata.' . $member, $allowed);
+                    $skipReason = null;
 
                     foreach ($subqueries as $path => $subDescriptorsByPath) {
                         if (!ArrayUtilities::pathExisits($descriptor, $path)) {
@@ -342,6 +343,13 @@ class XmlFile implements LoaderInterface
                             }
                         }
                         if ($chosen === null) {
+                            $skipReason = sprintf(
+                                ExceptionDefinitions::SUBQUERY_VARIANT_NOT_FOUND->value,
+                                $subqueryBase['path'],
+                                $member,
+                                $allowed,
+                                $name
+                            );
                             continue;
                         }
                         ArrayUtilities::setArrayValueByPath($chosen, 'metadata.' . $member, $allowed);
@@ -352,6 +360,13 @@ class XmlFile implements LoaderInterface
                         ArrayUtilities::setArrayValueByPath($descriptor, $path, $subqueryDescriptor);
                     }
 
+                    if ($skipReason !== null) {
+                        // The parent variant is valid, but one of its subqueries has no
+                        // descriptor for this tenant. Skipping is safer than granting access
+                        // by falling back to another tenant's variant.
+                        $this->logger?->warning($skipReason);
+                        continue;
+                    }
                     $unresolved = $this->unresolvedSubqueryPaths($descriptor);
                     if ($unresolved !== []) {
                         // Keep the historical behaviour (skip the variant) but make it visible.
