@@ -6,6 +6,7 @@ use Psr\Log\LoggerInterface;
 use Tabula17\Satelles\Omnia\Roga\Collection\StatementCollection;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\DescriptorClasses;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\MetadataDescriptor;
+use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
 use Tabula17\Satelles\Omnia\Roga\Exception\ExceptionDefinitions;
 use Tabula17\Satelles\Omnia\Roga\Exception\InvalidArgumentException;
 use Tabula17\Satelles\Omnia\Roga\LoaderInterface;
@@ -34,6 +35,9 @@ class XmlFile implements LoaderInterface
         }
     }
 
+    /** @var array<string, true> Canonical paths currently being parsed, used to detect cycles. */
+    private array $loadingStack = [];
+
     /**
      */
     public function __construct(string $baseDir, private(set) readonly ?CacheManagerInterface $cacheManager = null, private readonly ?LoggerInterface $logger = null)
@@ -42,23 +46,50 @@ class XmlFile implements LoaderInterface
     }
 
     /**
-     * Sanitizes the path to ensure it is valid and returns the sanitized path.
-     * @param string $path
-     * @return string
+     * Resolves a logical statement name to a canonical, baseDir-confined file path.
+     * Dots inside file names are preserved; traversal and absolute paths are rejected.
+     *
+     * @throws InvalidArgumentException|ConfigException
      */
-    private function sanitizePath(string $path): string
+    private function resolvePath(string $name): string
     {
-        $end = '';
-        if (str_ends_with($path, '.xml')) {
+        $path = str_replace(['\\', '|'], '/', $name);
+        if (strcasecmp(substr($path, -4), '.xml') === 0) {
             $path = substr($path, 0, -4);
-            $end = '.xml';
         }
-        $path = str_replace(['\\', '/', '.', '|'], DIRECTORY_SEPARATOR, $path);
-        $pathArr = explode(DIRECTORY_SEPARATOR, $path);
+        if (str_starts_with($path, '/') || preg_match('/^[A-Za-z]:/', $path) === 1) {
+            throw new InvalidArgumentException(sprintf(ExceptionDefinitions::XML_FILE_OUTSIDE_BASE_DIR->value, $name, $this->baseDir));
+        }
+        $segments = [];
+        foreach (explode('/', $path) as $segment) {
+            if ($segment === '' || $segment === '.') {
+                continue;
+            }
+            if ($segment === '..') {
+                throw new InvalidArgumentException(sprintf(ExceptionDefinitions::XML_FILE_OUTSIDE_BASE_DIR->value, $name, $this->baseDir));
+            }
+            $segments[] = $segment;
+        }
+        $candidate = $this->baseDir . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $segments) . '.xml';
+        $resolved = realpath($candidate);
+        if ($resolved === false || !is_file($resolved)) {
+            throw new InvalidArgumentException(sprintf(ExceptionDefinitions::XML_FILE_NOT_FOUND->value, $candidate));
+        }
+        $base = realpath($this->baseDir);
+        if ($base === false || !str_starts_with($resolved, $base . DIRECTORY_SEPARATOR)) {
+            throw new InvalidArgumentException(sprintf(ExceptionDefinitions::XML_FILE_OUTSIDE_BASE_DIR->value, $name, $this->baseDir));
+        }
+        return $resolved;
+    }
 
-        $pathArr = array_filter($pathArr, static fn($value) => !empty($value));
-        array_unshift($pathArr, $this->baseDir);
-        return implode(DIRECTORY_SEPARATOR, $pathArr) . $end;
+    /**
+     * Cache keys must include baseDir, canonical path and file mtime: a bare name
+     * collides between tenants sharing a cache backend and goes stale after edits.
+     */
+    private function cacheKey(string $name): string
+    {
+        $path = $this->resolvePath($name);
+        return 'roga:' . hash('xxh128', $path . '|' . (filemtime($path) ?: 0) . '|v1');
     }
 
     /**
@@ -70,21 +101,44 @@ class XmlFile implements LoaderInterface
      */
     private function loadXml(string $name, array &$subqueries = [], ?string $parent = null): array
     {
-        if (!str_ends_with($name, '.xml')) {
-            $name .= '.xml';
-        }
+        $path = $this->resolvePath($name);
         $this->logger?->info("Loading XML file: $name from directory '$this->baseDir'");
-
-        $array = ArrayUtilities::simpleXmlToArray(simplexml_load_string(file_get_contents($this->sanitizePath($name))));
-        if (isset($array['statement']) && !array_is_list($array['statement'])) {
-            $array['statement'] = [$array['statement']];
+        if (isset($this->loadingStack[$path])) {
+            throw new ConfigException(sprintf(ExceptionDefinitions::CIRCULAR_SUBQUERY->value, $path));
         }
-        $list = $this->checkForSubQueries($this->checkArrayListsInChild($array['statement']), $parent, $subqueries);
+        $this->loadingStack[$path] = true;
+        try {
+            $contents = @file_get_contents($path);
+            if ($contents === false) {
+                throw new InvalidArgumentException(sprintf(ExceptionDefinitions::XML_FILE_NOT_FOUND->value, $path));
+            }
+            $previous = libxml_use_internal_errors(true);
+            $xml = simplexml_load_string($contents, 'SimpleXMLElement', LIBXML_NONET);
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+            if ($xml === false) {
+                throw new ConfigException(sprintf(ExceptionDefinitions::INVALID_XML->value, $path));
+            }
+            $array = ArrayUtilities::simpleXmlToArray($xml);
+            if (!is_array($array) || !isset($array['statement'])) {
+                throw new ConfigException(sprintf(ExceptionDefinitions::INVALID_STATEMENT_STRUCTURE->value, $path));
+            }
+            $statements = $array['statement'];
+            if (!is_array($statements)) {
+                throw new ConfigException(sprintf(ExceptionDefinitions::INVALID_STATEMENT_STRUCTURE->value, $path));
+            }
+            if (!array_is_list($statements)) {
+                $statements = [$statements];
+            }
+            $list = $this->checkForSubQueries($this->checkArrayListsInChild($statements), $parent, $subqueries);
 
-        return [
-            'statements' => $list,
-            'subqueries' => $subqueries,
-        ];
+            return [
+                'statements' => $list,
+                'subqueries' => $subqueries,
+            ];
+        } finally {
+            unset($this->loadingStack[$path]);
+        }
     }
 
     /**
@@ -164,9 +218,14 @@ class XmlFile implements LoaderInterface
     private function checkArrayListsInChild(array $collection, ?string $parent = null): array
     {
         $newList = [];
+        $childCount = count(array_filter(
+            $collection,
+            static fn(string $key): bool => $key !== '@attributes',
+            ARRAY_FILTER_USE_KEY
+        ));
         foreach ($collection as $key => $value) {
             if (is_array($value)) {
-                if (count($collection) === 1 && $parent && substr($parent, 0, -1) === $key) {
+                if ($childCount === 1 && $parent && substr($parent, 0, -1) === $key) {
                     if (array_is_list($value)) {
                         $this->logger?->debug("Found redundant array list in $key. Merge with parent ($parent).");
                         foreach ($value as $v) {
@@ -193,80 +252,124 @@ class XmlFile implements LoaderInterface
      * @param bool $forceReload
      * @return array|null
      */
+    private static function metadataValues(mixed $value): array
+    {
+        return array_map('strval', is_array($value) ? array_values($value) : [$value]);
+    }
+
+    /** ArrayUtilities::getArrayValueByPath() returns null for scalar leaves, so read metadata directly. */
+    private static function subqueryMetadataValue(array $descriptor, string $member): mixed
+    {
+        $metadata = $descriptor['metadata'] ?? null;
+        return is_array($metadata) ? ($metadata[$member] ?? null) : null;
+    }
+
+    /**
+     * Only unresolved subquery/union references should invalidate a descriptor.
+     */
+    private function unresolvedSubqueryPaths(array $descriptor): array
+    {
+        $paths = [];
+        foreach (ArrayUtilities::getArrayPathsByKey($descriptor, 'path', []) as $path) {
+            $segments = explode('.', (string)$path);
+            array_pop($segments);
+            if (in_array('subquery', $segments, true) || in_array('union', $segments, true)) {
+                $paths[] = $path;
+            }
+        }
+        return $paths;
+    }
+
     public function getStatementDescriptors(string $name, bool $forceReload = false): ?array
     {
         $this->logger?->info("Loading statement descriptors for $name");
-        if ($forceReload || !$this->cacheManager || !$this->cacheManager?->has($name)) {
-            $descriptors = [];
-            ['statements' => $statements, 'subqueries' => $subqueries] = $this->loadXml($name);
+        $cacheKey = $this->cacheKey($name);
+        if (!$forceReload && $this->cacheManager !== null && $this->cacheManager->has($cacheKey)) {
+            $cached = $this->cacheManager->get($cacheKey);
+            if (is_array($cached) && array_is_list($cached)) {
+                return $cached;
+            }
+        }
 
-            foreach ($statements as $statement) {
-                $subsDetectedByKey = ArrayUtilities::getArrayPathsByKey($statement, 'subquery');
-                $descriptorClass = DescriptorClasses::fromValue($statement['type'] ?? 'select')->value;
-                $statementIdentifiers = array_intersect_key($statement['metadata'], array_flip(MetadataDescriptor::getIdentifiedBy()));
-                $subqueriesForPath = [];
-                if (!empty($subsDetectedByKey)) {
-                    foreach ($subsDetectedByKey as $subqueryPath) {
-                        $detected = ArrayUtilities::getArrayValueByPath($statement, $subqueryPath);
-                        if (isset($detected['path'], $subqueries[$subqueryPath][$detected['path']])) {
-                            if (!isset($subqueriesForPath[$subqueryPath])) {
-                                $subqueriesForPath[$subqueryPath] = [];
-                            }
-                            if (!isset($subqueriesForPath[$subqueryPath][$detected['path']])) {
-                                $subqueriesForPath[$subqueryPath][$detected['path']] = $subqueries[$subqueryPath][$detected['path']];
-                            }
+        $descriptors = [];
+        ['statements' => $statements, 'subqueries' => $subqueries] = $this->loadXml($name);
+
+        foreach ($statements as $statement) {
+            $descriptorClass = DescriptorClasses::fromValue($statement['type'] ?? 'select')->value;
+            $metadata = is_array($statement['metadata'] ?? null) ? $statement['metadata'] : [];
+            $statementIdentifiers = array_intersect_key($metadata, array_flip(MetadataDescriptor::getIdentifiedBy()));
+            if ($statementIdentifiers === []) {
+                // <allowed> is optional; such a definition applies to every tenant.
+                $statementIdentifiers = ['allowed' => '*'];
+            }
+
+            foreach ($statementIdentifiers as $member => $identifier) {
+                $this->logger?->debug("Processing statements identified by $member " . var_export($identifier, true));
+                foreach ((is_array($identifier) ? $identifier : [$identifier]) as $allowed) {
+                    $descriptor = $statement;
+                    ArrayUtilities::setArrayValueByPath($descriptor, 'metadata.' . $member, $allowed);
+
+                    foreach ($subqueries as $path => $subDescriptorsByPath) {
+                        if (!ArrayUtilities::pathExisits($descriptor, $path)) {
+                            continue;
                         }
-                    }
-                }
-
-                foreach ($statementIdentifiers as $member => $identifier) {
-                    $this->logger?->debug("Processing statements identified by $member " . var_export($identifier, true));
-                    if (!is_array($identifier)) {
-                        $identifier = [$identifier];
-                    }
-                    foreach ($identifier as $allowed) {
-                        $descriptor = $statement;
-                        ArrayUtilities::setArrayValueByPath($descriptor, 'metadata.' . $member, $allowed);
-
-                        foreach ($subqueries as $path => $subDescriptors) {
-
-                          //  $currentPaths = ArrayUtilities::getArrayPathsByKey($descriptor, 'subquery', []);
-
-                            if (ArrayUtilities::pathExisits($descriptor, $path)) {
-                                $subqueryBase = ArrayUtilities::getArrayValueByPath($descriptor, $path);
-                                if (isset($subqueryBase['path'])) {
-                                    $subqueryDescriptors = $subDescriptors[$subqueryBase['path']] ?? [];
-                                    if (!empty($subqueryDescriptors)) {
-                                        foreach ($subqueryDescriptors['statements'] as $sqKey => $sqDescriptor) {
-                                            $allowedForSubquery = ArrayUtilities::getArrayValueByPath($sqDescriptor, 'metadata.' . $member);
-                                            if ((isset($allowedForSubquery) && in_array($allowed, $allowedForSubquery)) || $allowed === '*') {
-                                                ArrayUtilities::setArrayValueByPath($sqDescriptor, 'metadata.' . $member, $allowed);
-                                                $subqueryDescriptor = ['descriptor' => $sqDescriptor];
-                                                if (isset($subqueryDescriptors['arguments'])) {
-                                                    $subqueryDescriptor['arguments'] = $subqueryDescriptors['arguments'];
-                                                }
-                                                ArrayUtilities::setArrayValueByPath($descriptor, $path, $subqueryDescriptor);
-                                                break;
-                                            }
-                                        }
+                        $subqueryBase = ArrayUtilities::getArrayValueByPath($descriptor, $path);
+                        if (!is_array($subqueryBase) || !isset($subqueryBase['path'])) {
+                            continue;
+                        }
+                        $subqueryDescriptors = $subDescriptorsByPath[$subqueryBase['path']] ?? null;
+                        if ($subqueryDescriptors === null || empty($subqueryDescriptors['statements'])) {
+                            continue;
+                        }
+                        $chosen = null;
+                        if ((string)$allowed === '*') {
+                            $chosen = $subqueryDescriptors['statements'][0];
+                        } else {
+                            // Exact tenant match wins; '*' is only a fallback.
+                            foreach ([[false], [true]] as $wildcardPass) {
+                                foreach ($subqueryDescriptors['statements'] as $candidate) {
+                                    $values = self::metadataValues(
+                                        self::subqueryMetadataValue($candidate, $member) ?? []
+                                    );
+                                    $matched = $wildcardPass[0]
+                                        ? in_array('*', $values, true)
+                                        : in_array((string)$allowed, $values, true);
+                                    if ($matched) {
+                                        $chosen = $candidate;
+                                        break 2;
                                     }
                                 }
                             }
                         }
-                        $checkOrphanPaths = ArrayUtilities::getArrayPathsByKey($descriptor, 'path', []);
-                        if (empty($checkOrphanPaths)) {
-                            $descriptors[] = new $descriptorClass($descriptor);// $descriptor;
+                        if ($chosen === null) {
+                            continue;
                         }
+                        ArrayUtilities::setArrayValueByPath($chosen, 'metadata.' . $member, $allowed);
+                        $subqueryDescriptor = ['descriptor' => $chosen];
+                        if (isset($subqueryDescriptors['arguments'])) {
+                            $subqueryDescriptor['arguments'] = $subqueryDescriptors['arguments'];
+                        }
+                        ArrayUtilities::setArrayValueByPath($descriptor, $path, $subqueryDescriptor);
                     }
+
+                    $unresolved = $this->unresolvedSubqueryPaths($descriptor);
+                    if ($unresolved !== []) {
+                        // Keep the historical behaviour (skip the variant) but make it visible.
+                        $this->logger?->error(sprintf(
+                            ExceptionDefinitions::UNRESOLVED_SUBQUERY->value,
+                            $name,
+                            implode(', ', $unresolved)
+                        ));
+                        continue;
+                    }
+                    $descriptors[] = new $descriptorClass($descriptor);
                 }
             }
-            $this->cacheManager?->set($name, $descriptors);
-            $this->logger?->debug("Statement descriptors for $name loaded and refreshed successfully.");
-            return $descriptors;
         }
-        $this->logger?->debug("Statement descriptors for $name already loaded from cache.");
-        return $this->cacheManager->get($name);
 
+        $this->cacheManager?->set($cacheKey, $descriptors);
+        $this->logger?->debug("Statement descriptors for $name loaded and refreshed successfully.");
+        return $descriptors;
     }
 
     /**
@@ -278,7 +381,8 @@ class XmlFile implements LoaderInterface
      */
     public function getStatementCollection(string $name, bool $forceReload = false): ?StatementCollection
     {
-        return new StatementCollection(...$this->getStatementDescriptors($name, $forceReload));
+        $descriptors = $this->getStatementDescriptors($name, $forceReload);
+        return $descriptors === null ? null : new StatementCollection(...$descriptors);
     }
 
 }

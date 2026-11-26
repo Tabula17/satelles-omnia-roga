@@ -30,12 +30,22 @@ enum QuotesEnum: string
      * @param string $value The input string to be escaped.
      * @return string The escaped string with replaced values.
      */
+    private function escapedCharacters(): array
+    {
+        if ($this === self::SQUARE_BRACKET) {
+            // T-SQL escapes the closing bracket only.
+            return [']'];
+        }
+        return array_values(array_unique(str_split($this->value)));
+    }
+
     public function escape(string $value): string
     {
         if ($this === self::NONE) {
             return $value;
         }
-        return str_replace($this->value, $this->value . $this->value, $value);
+        $chars = $this->escapedCharacters();
+        return str_replace($chars, array_map(static fn(string $char): string => $char . $char, $chars), $value);
     }
 
     public function unescape(string $value): string
@@ -43,7 +53,8 @@ enum QuotesEnum: string
         if ($this === self::NONE) {
             return $value;
         }
-        return str_replace($this->value . $this->value, $this->value, $value);
+        $chars = $this->escapedCharacters();
+        return str_replace(array_map(static fn(string $char): string => $char . $char, $chars), $chars, $value);
     }
 
     public function forIdentifiers(): bool
@@ -103,6 +114,14 @@ enum QuotesEnum: string
         if ($this === self::NONE) {
             return true;
         }
-        return str_starts_with($value, $this->start()) && str_ends_with($value, $this->end());
+        $start = $this->start();
+        $end = $this->end();
+        if (!str_starts_with($value, $start) || !str_ends_with($value, $end)) {
+            return false;
+        }
+        // A value only counts as quoted when its body has no unescaped delimiter.
+        $inner = substr($value, strlen($start), -strlen($end));
+        $body = str_replace($end . $end, '', $inner);
+        return !str_contains($body, $end);
     }
 }

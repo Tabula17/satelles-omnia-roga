@@ -16,6 +16,7 @@ use Tabula17\Satelles\Omnia\Roga\Exception\NotAllowedException;
 class DeleteStatement implements StatementProcessorInterface
 {
     use FormatTrait;
+    use BindingsTrait;
 
     private(set) array $values = [];
     private(set) array $ors = [];
@@ -50,8 +51,9 @@ class DeleteStatement implements StatementProcessorInterface
     private function getQuote(): QuotesEnum
     {
         $quote = QuotesEnum::NONE;
-        if ($this->statementParts->metadata->quoteIdentifier) {
-            $quote = $this->statementParts->metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
+        $metadata = $this->statementParts->metadata ?? null;
+        if ($metadata?->quoteIdentifier) {
+            $quote = $metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
         }
         return $quote;
     }
@@ -162,14 +164,9 @@ class DeleteStatement implements StatementProcessorInterface
                     $this->setValue($condition->placeholder, $condition->defaultValue);
                 }
             }
-            if (!empty((string)$condition)) {
-                if ($condition->groupCondition) {
-                    if (!$this->having->partExists((string)$condition)) {
-                        $this->having->add((string)$condition);
-                    }
-                } else if (!$this->where->partExists((string)$condition)) {
-                    $this->where->add((string)$condition);
-                }
+            if (!empty((string)$condition) && !$this->where->partExists((string)$condition)) {
+                // HAVING is not valid on DELETE; grouped conditions belong in WHERE.
+                $this->where->add((string)$condition);
             }
         }
         foreach ($this->ors as $condition) {
@@ -198,8 +195,8 @@ class DeleteStatement implements StatementProcessorInterface
             if (($or->count() > 0) && !$this->where->partExists($or)) {
                 $this->where->add($or);
             }
-            if (($hor->count() > 0) && !$this->having->partExists($hor)) {
-                $this->having->add($hor);
+            if (($hor->count() > 0) && !$this->where->partExists($hor)) {
+                $this->where->add($hor);
             }
         }
         return $this;
@@ -211,7 +208,7 @@ class DeleteStatement implements StatementProcessorInterface
         if (empty((string)$condition)) {
             return;
         }
-        if (isset($condition->subquery) && $condition->subquery instanceof self) {
+        if (isset($condition->subquery) && $condition->subquery instanceof SelectStatement) {
             $this->elevateSubqueryParams($condition->subquery);
         }
         if ($condition->combined !== null) {
@@ -277,13 +274,12 @@ class DeleteStatement implements StatementProcessorInterface
 
     public function setValue(string $placeholder, mixed $value): StatementProcessorInterface
     {
+        $placeholder = $this->normalizePlaceholder($placeholder);
         $this->values[$placeholder] = $value;
         if (isset($this->params[$placeholder])) {
             $this->params[$placeholder]->setValue($value);
-            if ($this->params[$placeholder]->bindable) {
-                $this->bindings[$placeholder] = $this->params[$placeholder]->getValue();
-            }
-            if (isset($this->params[$placeholder]->subquery) && $this->params[$placeholder]->subquery instanceof self) {
+            $this->registerBinding($placeholder, $this->params[$placeholder]);
+            if (isset($this->params[$placeholder]->subquery) && $this->params[$placeholder]->subquery instanceof SelectStatement) {
                 $this->params[$placeholder]->subquery->setValues($this->values);
                 $this->params[$placeholder]->subquery->prettyPrint = $this->prettyPrint && $this->prettyPrintDeep;
                 $this->elevateSubqueryParams($this->params[$placeholder]->subquery);
@@ -294,17 +290,21 @@ class DeleteStatement implements StatementProcessorInterface
 
     public function getValue(string $placeholder): mixed
     {
-        return $this->values[$placeholder] ?? null;
+        return $this->values[$this->normalizePlaceholder($placeholder)] ?? null;
     }
 
     public function removeValue(string $placeholder): StatementProcessorInterface
     {
-        unset($this->values[$placeholder], $this->bindings[$placeholder]);
+        $placeholder = $this->normalizePlaceholder($placeholder);
+        unset($this->values[$placeholder]);
+        $this->removeExpandedBindings($placeholder);
         return $this;
     }
 
     public function process(): StatementProcessorInterface
     {
+        $this->where->clear();
+        $this->having->clear();
         $this->processFilters()->processWhere();
         return $this;
     }
@@ -321,7 +321,7 @@ class DeleteStatement implements StatementProcessorInterface
 
     public function hasValue(string $placeholder): bool
     {
-        return isset($this->values[$placeholder]);
+        return isset($this->values[$this->normalizePlaceholder($placeholder)]);
     }
 
     public function __toString(): string
@@ -336,12 +336,6 @@ class DeleteStatement implements StatementProcessorInterface
         } else {
             throw new NotAllowedException(sprintf(ExceptionDefinitions::STATEMENT_WITHOUT_WHERE->value, 'DELETE'));
         }
-        if ($this->having->count() > 0) {
-            $this->having->prettyPrint = $this->prettyPrint && $this->prettyPrintDeep;
-            $parts[] = Keywords::HAVING->value;
-            $parts[] = $this->having;
-        }
-
         $char = $this->prettyPrint ? "\n" : ' ';
         return implode($char, $parts);
     }

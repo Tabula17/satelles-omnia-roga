@@ -101,11 +101,14 @@ class OrderBy
      */
     public function __toString(): string
     {
+        $pre = $this->preSeparator;
+        $separator = $this->separator;
+        $post = $this->postSeparator;
         if ($this->prettyPrint) {
-            $this->preSeparator = ($this->prettyChars[0] ?? '') . $this->preSeparator;
-            $this->separator .= $this->prettyChars[1] ?? '';
-            $this->postSeparator .= ($this->prettyChars[2] ?? '');
+            $pre = ($this->prettyChars[0] ?? '') . $pre;
+            $separator .= $this->prettyChars[1] ?? '';
+            $post .= $this->prettyChars[2] ?? '';
         }
-        return $this->preSeparator . implode($this->separator, $this->parts) . $this->postSeparator;
+        return $pre . implode($separator, $this->parts) . $post;
     }
 }

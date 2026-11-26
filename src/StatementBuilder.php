@@ -34,7 +34,8 @@ class StatementBuilder
 
     private StatementCollection $collection;
     private ?StatementDescriptor $descriptor = null;
-    private StatementProcessorInterface $processor;
+    private ?string $descriptorCacheKey = null;
+    private ?StatementProcessorInterface $processor = null;
 
     /**
      * Constructor method for initializing the object with the provided statement name, reload flag, and loader instance.
@@ -55,12 +56,31 @@ class StatementBuilder
         $this->collection = $this->loader->getStatementCollection($statementName, $reload);
     }
 
+    private static function stringify(mixed $value): string
+    {
+        if (is_array($value)) {
+            return '[' . implode(', ', array_map(static fn($item) => self::stringify($item), $value)) . ']';
+        }
+        return is_scalar($value) || $value === null ? (string)$value : get_debug_type($value);
+    }
+
     public function getDescriptorBy(string $member, mixed $value, string $version = 'latest', ?string $variant = 'default'): ?Descriptor\StatementDescriptor
     {
-
-        if (!isset($this->descriptor)) {
-            $this->logger?->debug(sprintf($this->statementName . ': StatementBuilder::getDescriptorBy(%s, %s, %s, %s)', $member, $value, $version, $variant));
-            $this->descriptor = $this->collection->getDescriptorsByMetadata($member, $value)?->getDescriptorsByVersion($version)?->getVariant($variant);
+        $cacheKey = implode('|', [$member, self::stringify($value), $version, self::stringify($variant)]);
+        if ($this->descriptorCacheKey !== $cacheKey) {
+            $this->logger?->debug(sprintf(
+                '%s: StatementBuilder::getDescriptorBy(%s, %s, %s, %s)',
+                $this->statementName,
+                $member,
+                self::stringify($value),
+                $version,
+                self::stringify($variant)
+            ));
+            $this->descriptor = $this->collection
+                ->getDescriptorsByMetadata($member, $value)
+                ?->getDescriptorsByVersion($version)
+                ?->getVariant($variant ?? 'default');
+            $this->descriptorCacheKey = $cacheKey;
         }
         return $this->descriptor;
     }
@@ -94,9 +114,23 @@ class StatementBuilder
     public function loadStatementBy(string $member, mixed $value, string $version = 'latest', ?string $variant = 'default'): self
     {
         $this->descriptor = null;
-        $this->logger?->debug(sprintf('StatementBuilder::loadStatementBy(%s, %s, %s, %s)', $member, $value, $version, $variant));
-        //$this->descriptor = $this->collection->getDescriptorsByMetadata($member, $value)->getDescriptorByVersion($version);
+        $this->descriptorCacheKey = null;
+        $this->processor = null;
+        $this->logger?->debug(sprintf(
+            'StatementBuilder::loadStatementBy(%s, %s, %s, %s)',
+            $member,
+            self::stringify($value),
+            $version,
+            self::stringify($variant)
+        ));
         $descriptor = $this->getDescriptorBy($member, $value, $version, $variant);
+        if (!$descriptor instanceof StatementDescriptor) {
+            throw new RuntimeException(sprintf(
+                ExceptionDefinitions::STATEMENT_NOT_FOUND_FOR_VARIANT->value,
+                self::stringify($value),
+                $this->statementName
+            ));
+        }
         if (isset($descriptor) && $descriptor instanceof Descriptor\StatementDescriptor) {
             $expression = new Expression();
             $statement = null;
@@ -190,14 +224,16 @@ class StatementBuilder
         return ParamTypes::fromName($type) ?? ParamTypes::STR->value;
     }
 
-    public function setValues(array $params): void
+    public function setValues(array $params): self
     {
         $this->processor?->setValues($params);
+        return $this;
     }
 
-    public function setValue(string $placeholder, mixed $value): void
+    public function setValue(string $placeholder, mixed $value): self
     {
         $this->processor?->setValue($placeholder, $value);
+        return $this;
     }
 
     public function getValue(string $placeholder): mixed
@@ -217,21 +253,27 @@ class StatementBuilder
 
     public function getPrettyStatement(): ?string
     {
-        if (isset($this->processor)) {
-            $this->processor->prettyPrint = true;
-            return $this->processor?->__toString();
+        if (!isset($this->processor)) {
+            return null;
         }
-        return null;
+        $previous = $this->processor->prettyPrint ?? false;
+        $this->processor->prettyPrint = true;
+        try {
+            return $this->processor->__toString();
+        } finally {
+            $this->processor->prettyPrint = $previous;
+        }
     }
 
-    public function removeValue(string $placeholder): void
+    public function removeValue(string $placeholder): self
     {
         $this->processor?->removeValue($placeholder);
+        return $this;
     }
 
-    public function getValues()
+    public function getValues(): array
     {
-        return $this->processor->values;
+        return $this->processor?->values ?? [];
     }
 
     /**
@@ -241,12 +283,15 @@ class StatementBuilder
      */
     public function getStatementType(): Descriptor\DescriptorClasses
     {
-        return $this->descriptor->type;
+        return $this->descriptor?->type ?? throw new RuntimeException('No statement has been loaded.');
     }
 
     public function getModel(): DataModelCollection
     {
         $model = new DataModelCollection();
+        if (!isset($this->processor)) {
+            return $model;
+        }
         if ($this->processor instanceof SelectStatement || $this->processor instanceof UnionStatement) {
             $this->processor->process();
             foreach ($this->processor->columns as $column) {

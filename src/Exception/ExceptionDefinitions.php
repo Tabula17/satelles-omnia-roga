@@ -22,6 +22,13 @@ enum ExceptionDefinitions: string
     case INSERT_WHITEOUT_TABLE = 'No se definieron la tabla a insertar';
     case INSERT_COLUMNS_AND_SELECT_COUNT_MISMATCH = 'La cantidad de columnas en el SELECT no coincide con la cantidad de columnas definidas en el INSERT';
     case STATEMENT_NOT_FOUND_FOR_VARIANT = 'No se encontró una sentencia para la variante de consulta "%s" en la definición "%s"';
+    case STATEMENT_TYPE_NOT_SUPPORTED = 'El tipo de sentencia "%s" no está soportado';
+    case XML_FILE_NOT_FOUND = 'No se encontró el archivo de definición "%s"';
+    case XML_FILE_OUTSIDE_BASE_DIR = 'La definición "%s" reside fuera del directorio base "%s"';
+    case INVALID_XML = 'El archivo "%s" no contiene XML válido';
+    case INVALID_STATEMENT_STRUCTURE = 'El archivo "%s" debe contener un elemento <statements> con al menos un <statement>';
+    case CIRCULAR_SUBQUERY = 'Referencia circular de subconsulta detectada en "%s"';
+    case UNRESOLVED_SUBQUERY = 'No se pudo resolver la subconsulta en "%s" (%s)';
     case POOL_SIZE_GREATER_THAN_ZERO = 'El tamaño del pool debe ser mayor que cero ';
     case POOL_NOT_FOUND = 'No se encontró el pool de conexiones "%s"';
     case POOL_CONNECTION_TIMEOUT = 'Tiempo de espera agotado para la conexión al pool de conexiones "%s" (%s segundos)';

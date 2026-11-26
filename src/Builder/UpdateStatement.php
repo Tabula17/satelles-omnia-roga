@@ -17,6 +17,7 @@ use Tabula17\Satelles\Omnia\Roga\Exception\ValueRequiredException;
 class UpdateStatement implements StatementProcessorInterface
 {
     use FormatTrait;
+    use BindingsTrait;
     private(set) array $values = [];
     private array $filters = [];
     private(set) array $ors = [];
@@ -52,8 +53,9 @@ class UpdateStatement implements StatementProcessorInterface
     private function getQuote(): QuotesEnum
     {
         $quote = QuotesEnum::NONE;
-        if ($this->statementParts->metadata->quoteIdentifier) {
-            $quote = $this->statementParts->metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
+        $metadata = $this->statementParts->metadata ?? null;
+        if ($metadata?->quoteIdentifier) {
+            $quote = $metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
         }
         return $quote;
     }
@@ -236,7 +238,7 @@ class UpdateStatement implements StatementProcessorInterface
         if (empty((string)$condition)) {
             return;
         }
-        if (isset($condition->subquery) && $condition->subquery instanceof self) {
+        if (isset($condition->subquery) && $condition->subquery instanceof SelectStatement) {
             $this->elevateSubqueryParams($condition->subquery);
         }
         if ($condition->combined !== null) {
@@ -292,16 +294,12 @@ class UpdateStatement implements StatementProcessorInterface
 
     public function setValue(string $placeholder, mixed $value): UpdateStatement
     {
-        if (!str_starts_with($placeholder, ':')) {
-            $placeholder = ':' . $placeholder;
-        }
+        $placeholder = $this->normalizePlaceholder($placeholder);
         $this->values[$placeholder] = $value;
         if (isset($this->params[$placeholder])) {
             $this->params[$placeholder]->setValue($value);
-            if ($this->params[$placeholder]->bindable) {
-                $this->bindings[$placeholder] = $this->params[$placeholder]->getValue();
-            }
-            if (isset($this->params[$placeholder]->subquery) && $this->params[$placeholder]->subquery instanceof self) {
+            $this->registerBinding($placeholder, $this->params[$placeholder]);
+            if (isset($this->params[$placeholder]->subquery) && $this->params[$placeholder]->subquery instanceof SelectStatement) {
                 $this->params[$placeholder]->subquery->setValues($this->values);
                 $this->params[$placeholder]->subquery->prettyPrint = $this->prettyPrint && $this->prettyPrintDeep;
                 $this->elevateSubqueryParams($this->params[$placeholder]->subquery);
@@ -312,7 +310,7 @@ class UpdateStatement implements StatementProcessorInterface
             if ($this->filters[$placeholder]->bindable) {
                 $this->bindings[$placeholder] = $this->filters[$placeholder]->getValue();
             }
-            if (isset($this->filters[$placeholder]->subquery) && $this->filters[$placeholder]->subquery instanceof self) {
+            if (isset($this->filters[$placeholder]->subquery) && $this->filters[$placeholder]->subquery instanceof SelectStatement) {
                 $this->filters[$placeholder]->subquery->setValues($this->values);
                 $this->filters[$placeholder]->subquery->prettyPrint = $this->prettyPrint && $this->prettyPrintDeep;
                 $this->elevateSubqueryParams($this->filters[$placeholder]->subquery);
@@ -323,12 +321,14 @@ class UpdateStatement implements StatementProcessorInterface
 
     public function getValue(string $placeholder): mixed
     {
-        return $this->values[$placeholder] ?? null;
+        return $this->values[$this->normalizePlaceholder($placeholder)] ?? null;
     }
 
     public function removeValue(string $placeholder): UpdateStatement
     {
-        unset($this->values[$placeholder], $this->bindings[$placeholder]);
+        $placeholder = $this->normalizePlaceholder($placeholder);
+        unset($this->values[$placeholder]);
+        $this->removeExpandedBindings($placeholder);
         return $this;
     }
 
@@ -339,14 +339,19 @@ class UpdateStatement implements StatementProcessorInterface
 
     public function hasValue(string $placeholder): bool
     {
-        return isset($this->values[$placeholder]);
+        return isset($this->values[$this->normalizePlaceholder($placeholder)]);
     }
     public function process(): StatementProcessorInterface
     {
+        // process() runs on every render; rebuild SET to avoid duplicated assignments.
+        $this->body->clear();
         foreach ($this->params as $argument) {
-            if (isset($this->values[$argument->placeholder]) || $argument->required === true) {
+            $hasValue = isset($this->values[$argument->placeholder]) || isset($argument->defaultValue);
+            if (!$hasValue && $argument->required === true) {
+                $this->setValue($argument->placeholder, null);
+            }
+            if ($hasValue) {
                 $this->setValue($argument->placeholder, $this->values[$argument->placeholder] ?? $argument->defaultValue);
-
                 $this->body->add($argument);
             }
         }

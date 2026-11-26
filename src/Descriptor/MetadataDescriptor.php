@@ -45,13 +45,6 @@ class MetadataDescriptor extends AbstractDescriptor
     /**
      * @var string|null $variant Can be a string or null. Represents the variant(s) associated with the metadata.
      * Used to filter metadata based on the variant if necessary, e.g., for differentiating between sync and async operations
-                }
-            }
-            $value = implode(',', $check);
-
-            $this->operation = strtolower($value);
-        }
-    }
     /**
      * @var string|null $variant Can be a string or null. Represents the variant(s) associated with the metadata.
      * Used to filter metadata based on the variant if necessary, e.g., for differentiating between sync and async operations
@@ -88,7 +81,7 @@ class MetadataDescriptor extends AbstractDescriptor
      */
     protected(set) ?string $version {
         set {
-            $cleanValue = ltrim($value, 'v');
+            $cleanValue = preg_replace('/^v/i', '', $value, 1) ?? $value;
 
             if (!$this->isValidVersion($cleanValue)) {
                 $cleanValue = '0.0.0';

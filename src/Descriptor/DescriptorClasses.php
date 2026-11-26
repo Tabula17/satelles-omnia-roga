@@ -2,22 +2,11 @@
 
 namespace Tabula17\Satelles\Omnia\Roga\Descriptor;
 
+use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
+use Tabula17\Satelles\Omnia\Roga\Exception\ExceptionDefinitions;
+
 /**
- * Enum DescriptorClasses represents a set of descriptors mapped to their corresponding class names.
- * Each case in the enum corresponds to a specific descriptor.
- *
- * This enum provides a static method to retrieve descriptor values based on given names or values.
- *
- * The following cases are available:
- * - SELECT
- * - INSERT
- * - UPDATE
- * - UNION
- * - EXEC
- * - DELETE
- *
- * Method:
- * - fromName(): Converts a given name or value to its corresponding descriptor value, or provides a default mapping.
+ * Maps the <type> value of a descriptor to its concrete descriptor class.
  */
 enum DescriptorClasses: string
 {
@@ -27,16 +16,21 @@ enum DescriptorClasses: string
     case UNION = UnionDescriptor::class;
     case EXEC = ExecuteDescriptor::class;
     case DELETE = DeleteDescriptor::class;
+
     public static function fromValue(int|string $value): ?self
     {
+        $value = strtolower(trim((string)$value));
         return match ($value) {
-            default => self::SELECT,
+            '', 'select' => self::SELECT,
             'insert' => self::INSERT,
             'union' => self::UNION,
             'exec', 'execute', 'call', 'func', 'function', 'sp', 'procedure' => self::EXEC,
             'update' => self::UPDATE,
             'delete' => self::DELETE,
+            default => throw new ConfigException(sprintf(
+                ExceptionDefinitions::STATEMENT_TYPE_NOT_SUPPORTED->value,
+                $value
+            )),
         };
     }
-
 }

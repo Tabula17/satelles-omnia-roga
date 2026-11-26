@@ -454,22 +454,26 @@ class Expression
      *
      * @return Expr\Func
      */
+    private function isPlaceholder(mixed $literal): bool
+    {
+        return is_string($literal) && (
+            preg_match('/^:[A-Za-z_][A-Za-z0-9_]*$/', $literal) === 1 ||
+            preg_match('/^\?\d*$/', $literal) === 1
+        );
+    }
+
     public function in(string $x, mixed $y): Expr\Func
     {
         if (!is_array($y)) {
             $y = [$y];
         }
         foreach ($y as &$literal) {
-            // If already an Expr\Literal, keep as-is
-            if ($literal instanceof Expr\Literal) {
-                continue;
-            }
-            // If it's a parameter placeholder (starts with ':' or '?'), leave untouched
-            if (is_string($literal) && (str_starts_with($literal, ':') || str_starts_with($literal, '?'))) {
+            if ($literal instanceof Expr\Literal || $this->isPlaceholder($literal)) {
                 continue;
             }
             $literal = $this->_quoteLiteral($literal);
         }
+        unset($literal);
 
         return new Expr\Func($x . ' IN', ...$y);
     }
@@ -494,7 +498,11 @@ class Expression
         }
         $quote_char = $this->quote_value;
 
-        return $quote_char . str_replace($quote_char, $quote_char . $quote_char, $literal) . $quote_char;
+        return $quote_char . str_replace(
+            ['\\', $quote_char],
+            ['\\\\', $quote_char . $quote_char],
+            (string)$literal
+        ) . $quote_char;
     }
 
     /**
@@ -511,16 +519,12 @@ class Expression
             $y = [$y];
         }
         foreach ($y as &$literal) {
-            // If already an Expr\Literal, keep as-is
-            if ($literal instanceof Expr\Literal) {
-                continue;
-            }
-            // If it's a parameter placeholder (starts with ':' or '?'), leave untouched
-            if (is_string($literal) && (str_starts_with($literal, ':') || str_starts_with($literal, '?'))) {
+            if ($literal instanceof Expr\Literal || $this->isPlaceholder($literal)) {
                 continue;
             }
             $literal = $this->_quoteLiteral($literal);
         }
+        unset($literal);
 
         return new Expr\Func($x . ' NOT IN', ...$y);
     }

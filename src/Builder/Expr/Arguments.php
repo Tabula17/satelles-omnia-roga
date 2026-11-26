@@ -23,25 +23,21 @@ class Arguments extends Base
         if ($this->count() === 0) {
             return '';
         }
-        if ($this->count() === 1) {
-            return (string)$this->parts[0];
-        }
 
-        $components = array();
-
+        $components = [];
         foreach ($this->parts as $part) {
             $components[] = $this->processQueryPart($part);
         }
-        if (!$this->surrounded) {
-            $this->preSeparator = '';
-            $this->postSeparator = '';
-        }
+
+        $pre = $this->surrounded ? $this->preSeparator : '';
+        $post = $this->surrounded ? $this->postSeparator : '';
+        $separator = $this->separator;
         if ($this->prettyPrint) {
-            $this->preSeparator = ($this->prettyChars[0] ?? '') . $this->preSeparator;
-            $this->separator .= $this->prettyChars[1] ?? '';
-            $this->postSeparator .= ($this->prettyChars[2] ?? '');
+            $pre = ($this->prettyChars[0] ?? '') . $pre;
+            $separator .= $this->prettyChars[1] ?? '';
+            $post .= $this->prettyChars[2] ?? '';
         }
-        return $this->preSeparator . implode($this->separator, $components) . $this->postSeparator;
+        return $pre . implode($separator, $components) . $post;
     }
 
     /**

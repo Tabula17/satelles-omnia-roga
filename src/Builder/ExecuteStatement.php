@@ -11,6 +11,7 @@ use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
 class ExecuteStatement implements StatementProcessorInterface
 {
     use FormatTrait;
+    use BindingsTrait;
 
     private From $procedure;
     private Arguments $body;
@@ -48,8 +49,9 @@ class ExecuteStatement implements StatementProcessorInterface
     private function getQuote(): QuotesEnum
     {
         $quote = QuotesEnum::NONE;
-        if ($this->statementParts->metadata->quoteIdentifier) {
-            $quote = $this->statementParts->metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
+        $metadata = $this->statementParts->metadata ?? null;
+        if ($metadata?->quoteIdentifier) {
+            $quote = $metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
         }
         return $quote;
     }
@@ -121,27 +123,25 @@ class ExecuteStatement implements StatementProcessorInterface
 
     public function setValue(string $placeholder, mixed $value): ExecuteStatement
     {
-        if (!str_starts_with($placeholder, ':')) {
-            $placeholder = ':' . $placeholder;
-        }
+        $placeholder = $this->normalizePlaceholder($placeholder);
         $this->values[$placeholder] = $value;
         if (isset($this->params[$placeholder])) {
             $this->params[$placeholder]->setValue($value);
-            if ($this->params[$placeholder]->bindable) {
-                $this->bindings[$placeholder] = $this->params[$placeholder]->getValue();
-            }
+            $this->registerBinding($placeholder, $this->params[$placeholder]);
         }
         return $this;
     }
 
     public function getValue(string $placeholder): mixed
     {
-        return $this->values[$placeholder] ?? null;
+        return $this->values[$this->normalizePlaceholder($placeholder)] ?? null;
     }
 
     public function removeValue(string $placeholder): ExecuteStatement
     {
-        unset($this->values[$placeholder], $this->bindings[$placeholder]);
+        $placeholder = $this->normalizePlaceholder($placeholder);
+        unset($this->values[$placeholder]);
+        $this->removeExpandedBindings($placeholder);
         return $this;
     }
 
@@ -167,7 +167,7 @@ class ExecuteStatement implements StatementProcessorInterface
 
     public function hasValue(string $placeholder): bool
     {
-        return isset($this->values[$placeholder]);
+        return isset($this->values[$this->normalizePlaceholder($placeholder)]);
     }
 
     public function __toString(): string
@@ -181,7 +181,7 @@ class ExecuteStatement implements StatementProcessorInterface
 
     public function getParam(string $placeholder): ?Param
     {
-        return $this->params[$placeholder];
+        return $this->params[$this->normalizePlaceholder($placeholder)] ?? null;
     }
 
     public function getMetadata(): ?MetadataDescriptor

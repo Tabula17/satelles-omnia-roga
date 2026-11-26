@@ -39,17 +39,21 @@ enum ParamTypes: int
 
     public static function fromName(int|string $value): int
     {
-        $value = strtolower($value);
+        if (is_int($value)) {
+            return self::tryFrom($value)?->value ?? self::STR->value;
+        }
+        $value = strtolower(trim($value));
         return match ($value) {
             'bool', 'boolean' => self::BOOL->value,
             'null' => self::NULL->value,
-            'int', 'integer' => self::INT->value,
-            'str', 'string', 'date', 'datestring', 'datetime', 'time', 'timestring', 'datetimestring', 'float', 'number', 'numeric' => self::STR->value,
+            'int', 'integer', 'array_int' => self::INT->value,
+            'str', 'string', 'date', 'datestring', 'datetime', 'time', 'timestring',
+            'datetimestring', 'float', 'number', 'numeric', 'columnname', 'expression' => self::STR->value,
             'str_char' => self::STR_CHAR->value,
             'str_natl' => self::STR_NATL->value,
             'lob' => self::LOB->value,
             'stmt' => self::STMT->value,
-            //   'input_output' => self::INPUT_OUTPUT
+            default => self::STR->value,
         };
     }
 }

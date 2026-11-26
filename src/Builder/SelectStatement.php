@@ -19,6 +19,7 @@ use Tabula17\Satelles\Utilis\Config\AbstractDescriptor;
 class SelectStatement implements StatementProcessorInterface
 {
     use FormatTrait;
+    use BindingsTrait;
 
     private(set) array $modifiersStart = [];
     private(set) array $modifiersEnd = [];
@@ -82,8 +83,9 @@ class SelectStatement implements StatementProcessorInterface
     private function getQuote(): QuotesEnum
     {
         $quote = QuotesEnum::NONE;
-        if ($this->statementParts->metadata->quoteIdentifier) {
-            $quote = $this->statementParts->metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
+        $metadata = $this->statementParts->metadata ?? null;
+        if ($metadata?->quoteIdentifier) {
+            $quote = $metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
         }
         return $quote;
     }
@@ -319,9 +321,7 @@ class SelectStatement implements StatementProcessorInterface
         if (isset($this->params[$placeholder])) {
             $this->values[$placeholder] = $value;
             $this->params[$placeholder]->setValue($value);
-            if ($this->params[$placeholder]->bindable) {
-                $this->bindings[$placeholder] = $this->params[$placeholder]->getValue();
-            }
+            $this->registerBinding($placeholder, $this->params[$placeholder]);
             if (isset($this->params[$placeholder]->subquery) && $this->params[$placeholder]->subquery instanceof self) {
                 $this->params[$placeholder]->subquery->statementParts->metadata->set('quoteIdentifier', $applyQuote);
                 $this->params[$placeholder]->subquery->statementParts->metadata->set('quoteType', $quote);
@@ -336,13 +336,15 @@ class SelectStatement implements StatementProcessorInterface
     public function getValue(string $placeholder): mixed
     {
         $this->init();
-        return $this->values[$placeholder] ?? null;
+        return $this->values[$this->normalizePlaceholder($placeholder)] ?? null;
     }
 
     public function removeValue(string $placeholder): SelectStatement
     {
         $this->init();
-        unset($this->values[$placeholder], $this->bindings[$placeholder]);
+        $placeholder = $this->normalizePlaceholder($placeholder);
+        unset($this->values[$placeholder]);
+        $this->removeExpandedBindings($placeholder);
         return $this;
     }
 
@@ -355,7 +357,7 @@ class SelectStatement implements StatementProcessorInterface
     public function hasValue(string $placeholder): bool
     {
         $this->init();
-        return isset($this->values[$placeholder]);
+        return isset($this->values[$this->normalizePlaceholder($placeholder)]);
     }
 
     /**
@@ -737,15 +739,15 @@ class SelectStatement implements StatementProcessorInterface
             $stringParts[] = $this->groupBy;
             //echo 'GROUP BY: ', $this->groupBy, "\n";
         }
-        if ($this->orderBy->count() > 0) {
-            $this->orderBy->prettyPrint = $this->prettyPrint;
-            $stringParts[] = $prettyChar . Keywords::ORDER_BY->value;
-            $stringParts[] = $this->orderBy;
-        }
         if ($this->having->count() > 0) {
             $this->having->prettyPrint = $this->prettyPrint;
             $stringParts[] = $prettyChar . Keywords::HAVING->value;
             $stringParts[] = $this->having;
+        }
+        if ($this->orderBy->count() > 0) {
+            $this->orderBy->prettyPrint = $this->prettyPrint;
+            $stringParts[] = $prettyChar . Keywords::ORDER_BY->value;
+            $stringParts[] = $this->orderBy;
         }
         $stringParts = array_merge($stringParts, $modifiersEnd);
         // echo 'STRING PARTS: ', var_export($stringParts, true), "\n";
@@ -754,7 +756,7 @@ class SelectStatement implements StatementProcessorInterface
 
     public function getParam(string $placeholder): ?Param
     {
-        return $this->params[$placeholder];
+        return $this->params[$this->normalizePlaceholder($placeholder)] ?? null;
     }
 
     public function getMetadata(): ?MetadataDescriptor

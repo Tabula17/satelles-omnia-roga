@@ -9,61 +9,71 @@ use Tabula17\Satelles\Utilis\Collection\GenericCollection;
 class StatementCollection extends GenericCollection
 {
     /**
-     * An array containing specific metadata variant keywords used for processing.
-     * Unused or commented keywords are provided for reference or future use.
+     * Keywords historically used to identify variants. Kept for backwards compatibility;
+     * the current source of truth is MetadataDescriptor::getIdentifiedBy().
      */
     public static array $metadataVariantKeywords = [
-        //'client',
-        //'clients',
-        //'variant',
-        //'variants',
         'allowed'
     ];
 
-    /**
-     * @param StatementDescriptor ...$descriptor
-     */
     public function __construct(StatementDescriptor ...$descriptor)
     {
         $this->values = $descriptor;
     }
 
     /**
-     * Retrieves a statement descriptor from a collection based on the provided metadata key and value.
-     *
-     * @param string $member The metadata key used to filter descriptors.
-     * @param mixed $value The metadata value to match against the specified key.
-     * @return StatementDescriptor|null Returns the matching descriptor if found, or null otherwise.
+     * Normalizes a metadata member (scalar or list) into a list of strings.
      */
-    public function getDescriptorByMetadata(string $member, mixed $value): ?StatementDescriptor
+    private static function metadataValues(mixed $value): array
     {
-        return array_find($this->values, static function ($descriptor) use ($member, $value) {
-            $hasDescriptor = isset($descriptor?->metadata?->{$member});
-            if (!$hasDescriptor) {
-                return false;
+        $items = is_array($value) ? $value : [$value];
+        $values = [];
+        foreach ($items as $item) {
+            if (is_string($item) || is_int($item) || is_float($item)) {
+                $values[] = (string)$item;
             }
-
-            $isValueArray = is_array($descriptor->metadata->{$member});
-            $valIsInt = is_int($value);
-            if ($isValueArray) {
-                if (count($descriptor->metadata->{$member}) === 1 && $descriptor->metadata->{$member} === '*') {
-                    return true;
-                }
-                return in_array($value, $descriptor->metadata->{$member});
-            }
-            return $descriptor->metadata->{$member} === '*' ||
-                (
-                    ($valIsInt ? (int)$descriptor->metadata->{$member} : $descriptor->metadata->{$member}) === $value
-                ) || $descriptor->metadata->{$member} === $value;
-        });
+        }
+        return array_values(array_unique($values));
     }
 
     /**
-     * Retrieves an array of unique metadata values associated with the given member from the descriptors.
-     *
-     * @param string $member The metadata key to look for in the descriptors.
-     * @return array An array of unique metadata values for the specified member.
+     * Exact matches take precedence over the '*' wildcard.
      */
+    private function findBy(string $member, mixed $value): array
+    {
+        if ($value === null) {
+            return [];
+        }
+        $needle = (string)$value;
+        $exact = [];
+        $wildcard = [];
+        foreach ($this->values as $descriptor) {
+            if (!isset($descriptor->metadata) || !isset($descriptor->metadata->{$member})) {
+                continue;
+            }
+            $values = self::metadataValues($descriptor->metadata->{$member});
+            if ($values === []) {
+                continue;
+            }
+            if (in_array($needle, $values, true)) {
+                $exact[] = $descriptor;
+            } elseif (in_array('*', $values, true)) {
+                $wildcard[] = $descriptor;
+            }
+        }
+        return $exact !== [] ? $exact : $wildcard;
+    }
+
+    private function collectionFrom(array $descriptors): ?self
+    {
+        return $descriptors === [] ? null : new self(...$descriptors);
+    }
+
+    public function getDescriptorByMetadata(string $member, mixed $value): ?StatementDescriptor
+    {
+        return $this->findBy($member, $value)[0] ?? null;
+    }
+
     public function availableVariantsByMetadata(string $member): array
     {
         return $this->getMetadataMemberValues($member);
@@ -71,74 +81,90 @@ class StatementCollection extends GenericCollection
 
     public function getMetadataMemberValues(string $member): array
     {
-        return array_filter(array_unique(array_map(static function ($descriptor) use ($member) {
-            if (is_string($member) && $descriptor->metadata->offsetExists($member)) {
-                return $descriptor->metadata->{$member};
+        $values = [];
+        foreach ($this->values as $descriptor) {
+            if (!isset($descriptor->metadata) || !isset($descriptor->metadata->{$member})) {
+                continue;
             }
-            return null;
-        }, $this->values)));
+            foreach (self::metadataValues($descriptor->metadata->{$member}) as $value) {
+                $values[$value] = $value;
+            }
+        }
+        return array_values($values);
     }
 
     public function getDescriptorsByMetadata(string $member, mixed $value): ?self
     {
-        $descriptors = array_filter($this->values, static function ($descriptor) use ($member, $value) {
-            return $descriptor->metadata->{$member} === (string)$value || $descriptor->metadata->{$member} === '*';
-        });
-        if (empty($descriptors)) {
-            return null;
+        return $this->collectionFrom($this->findBy($member, $value));
+    }
+
+    private function resolveVersion(string $version): ?string
+    {
+        if ($version !== 'latest') {
+            return $version;
         }
-        return new self(...$descriptors);
+        $best = null;
+        foreach ($this->getMetadataMemberValues('version') as $candidate) {
+            if ($best === null || version_compare($candidate, $best) === 1) {
+                $best = $candidate;
+            }
+        }
+        return $best;
     }
 
     public function getDescriptorByVersion(string $version = 'latest'): ?StatementDescriptor
     {
-        if ($version === 'latest') {
-            if ($this->count() === 1) {
-                return $this->first();
-            }
-            foreach ($this->getMetadataMemberValues('version') as $value) {
-                if ($version === 'latest' || version_compare($value, $version) === 1) {
-                    $version = $value;
-                }
-            }
-        }
-
-        return array_find($this->values, static function ($descriptor) use ($version) {
-            return $descriptor->version === $version;
-        });
+        return $this->getDescriptorsByVersion($version)?->first();
     }
+
     public function getDescriptorsByVersion(string $version = 'latest'): ?self
     {
-        if (!$this->hasVersions() || $this->count() === 1) {
-            return $this;
+        $versions = $this->getMetadataMemberValues('version');
+        if ($versions === []) {
+            // Definitions without version metadata are treated as a single unversioned set.
+            return $version === 'latest' ? $this : null;
         }
-        return $this->getDescriptorsByMetadata('version', $version);
+        return $this->getDescriptorsByMetadata('version', $this->resolveVersion($version));
     }
+
     public function hasVersions(): bool
     {
         return count($this->getMetadataMemberValues('version')) > 1;
     }
-    public function getVersions(): ?array
+
+    public function getVersions(): array
     {
         return $this->getMetadataMemberValues('version');
     }
+
     public function hasVariants(): bool
     {
         return count($this->getMetadataMemberValues(MetadataDescriptor::getVariantMember())) > 1;
     }
+
     public function getVariant(string $variant = 'default'): ?StatementDescriptor
     {
-        if (!$this->hasVariants() || $this->count() === 1) {
+        if ($this->getMetadataMemberValues(MetadataDescriptor::getVariantMember()) === []) {
             return $this->first();
         }
         return $this->getDescriptorByMetadata(MetadataDescriptor::getVariantMember(), $variant);
     }
-    public function getVariants(): ?array
+
+    public function getVariants(): array
     {
         return $this->getMetadataMemberValues(MetadataDescriptor::getVariantMember());
     }
+
     public function getDescriptorsVariants(): ?self
     {
-        return $this->getDescriptorsByMetadata(MetadataDescriptor::getVariantMember(), '*');
+        $descriptors = [];
+        foreach ($this->values as $descriptor) {
+            $member = MetadataDescriptor::getVariantMember();
+            if (isset($descriptor->metadata->{$member}) &&
+                in_array('*', self::metadataValues($descriptor->metadata->{$member}), true)) {
+                $descriptors[] = $descriptor;
+            }
+        }
+        return $this->collectionFrom($descriptors);
     }
 }

@@ -240,7 +240,7 @@ class Param implements Paraminterface
 
         $type = $this->descriptor['type'] ?? 'string';
         $dataType = DataTypes::fromName($type);
-        if (empty($value) && isset($this->descriptor['nullonempty'])) {
+        if (($value === null || $value === '') && !empty($this->descriptor['nullonempty'])) {
             $this->type = 'null';
             return null;
         }
@@ -296,10 +296,29 @@ class Param implements Paraminterface
 
     private function quoteValue(string $value): string
     {
-        if (!str_starts_with($this->quote_value, $value) && !str_ends_with($this->quote_value, $value)) {
-            $value = $this->quote_value . $value . $this->quote_value;
+        $quote = $this->quote_value;
+        if ($quote === '' || (str_starts_with($value, $quote) && str_ends_with($value, $quote))) {
+            return $value;
         }
-        return $value;
+        // Escape both the quote char and backslashes (MySQL backslash escapes).
+        return $quote . str_replace(['\\', $quote], ['\\\\', $quote . $quote], $value) . $quote;
+    }
+
+    /**
+     * Whether setValue() should create a PDO binding for this parameter.
+     * Template and subquery-argument parameters embed trusted SQL fragments
+     * instead of emitting a bindable placeholder.
+     */
+    public function isBindablePlaceholder(): bool
+    {
+        if (!$this->bindable || $this->subqueryAsArgument) {
+            return false;
+        }
+        if (!empty($this->paramTemplate)) {
+            return false;
+        }
+        $value = $this->getValue();
+        return $value !== null && $value !== '';
     }
 
     /**
@@ -310,7 +329,7 @@ class Param implements Paraminterface
     {
         $value = $this->getValue();
         $dataType = DataTypes::fromName($this->type);
-        if (empty($value) && DataTypes::fromName($this->type) !== DataTypes::BOOL) {
+        if (($value === null || $value === '') && $dataType !== DataTypes::BOOL) {
             return '';
         }
         if (is_array($value)) {
@@ -362,7 +381,7 @@ class Param implements Paraminterface
             $quote = !in_array($dataType, $noQuotables, true);
             if (is_array($value)) {
                 if ($quote) {
-                    array_walk($value, fn($v, $k) => $this->quoteValue($v));
+                    $value = array_map(fn($v) => $this->quoteValue((string)$v), $value);
                 }
                 $value = implode(', ', $value);
             } else if ($quote) {

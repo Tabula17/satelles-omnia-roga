@@ -133,6 +133,7 @@ enum Keywords: string
             'as' => self::AS,
             'on' => self::ON,
             'asc' => self::ASC,
+            'desc' => self::DESC,
             'collection' => self::DESC,
             'between' => self::BETWEEN,
             'in' => self::IN,

@@ -7,6 +7,8 @@ use Tabula17\Satelles\Omnia\Roga\Descriptor\UnionDescriptor;
 
 class UnionStatement implements StatementProcessorInterface
 {
+    use BindingsTrait;
+
     private(set) string $unionType;
     private array $parts = [];
     private(set) string $statementId;
@@ -49,8 +51,9 @@ class UnionStatement implements StatementProcessorInterface
     private function getQuote(): QuotesEnum
     {
         $quote = QuotesEnum::NONE;
-        if ($this->statementParts->metadata->quoteIdentifier) {
-            $quote = $this->statementParts->metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
+        $metadata = $this->statementParts->metadata ?? null;
+        if ($metadata?->quoteIdentifier) {
+            $quote = $metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
         }
         return $quote;
     }
@@ -105,15 +108,11 @@ class UnionStatement implements StatementProcessorInterface
 
     public function setValue(string $placeholder, mixed $value): UnionStatement
     {
-        if (!str_starts_with($placeholder, ':')) {
-            $placeholder = ':' . $placeholder;
-        }
+        $placeholder = $this->normalizePlaceholder($placeholder);
         $this->values[$placeholder] = $value;
         if (isset($this->params[$placeholder])) {
             $this->params[$placeholder]->setValue($value);
-            if ($this->params[$placeholder]->bindable) {
-                $this->bindings[$placeholder] = $this->params[$placeholder]->getValue();
-            }
+            $this->registerBinding($placeholder, $this->params[$placeholder]);
         }
         foreach ($this->parts as $select) {
             $select->setValue($placeholder, $value);
@@ -123,12 +122,14 @@ class UnionStatement implements StatementProcessorInterface
 
     public function getValue(string $placeholder): mixed
     {
-        return $this->values[$placeholder] ?? null;
+        return $this->values[$this->normalizePlaceholder($placeholder)] ?? null;
     }
 
     public function removeValue(string $placeholder): UnionStatement
     {
-        unset($this->values[$placeholder], $this->bindings[$placeholder]);
+        $placeholder = $this->normalizePlaceholder($placeholder);
+        unset($this->values[$placeholder]);
+        $this->removeExpandedBindings($placeholder);
         foreach ($this->parts as $select) {
             $select->removeValue($placeholder);
         }
@@ -142,8 +143,16 @@ class UnionStatement implements StatementProcessorInterface
          * @var SelectStatement $select ;
          */
         foreach ($this->parts as $select) {
-            $select->getMetadata()->set('quoteIdentifier', $quote !== QuotesEnum::NONE);
-            $select->getMetadata()->set('quoteType', $quote);
+            $metadata = $select->getMetadata();
+            if ($metadata === null) {
+                $select->overrideMetadata([
+                    'quoteIdentifier' => $quote !== QuotesEnum::NONE,
+                    'quoteType' => $quote,
+                ]);
+            } else {
+                $metadata->set('quoteIdentifier', $quote !== QuotesEnum::NONE);
+                $metadata->set('quoteType', $quote);
+            }
             $select->prettyPrint = $this->prettyPrint && $this->prettyPrintDeep;
         }
         return $this;
@@ -151,7 +160,7 @@ class UnionStatement implements StatementProcessorInterface
 
     public function getParam(string $placeholder): ?Param
     {
-        return $this->params[$placeholder];
+        return $this->params[$this->normalizePlaceholder($placeholder)] ?? null;
     }
 
     /**
@@ -175,7 +184,7 @@ class UnionStatement implements StatementProcessorInterface
 
     public function hasValue(string $placeholder): bool
     {
-        return isset($this->values[$placeholder]);
+        return isset($this->values[$this->normalizePlaceholder($placeholder)]);
     }
 
     public function getMetadata(): ?MetadataDescriptor

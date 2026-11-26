@@ -13,6 +13,7 @@ use Tabula17\Satelles\Omnia\Roga\Exception\ExceptionDefinitions;
 class InsertStatement implements StatementProcessorInterface
 {
     use FormatTrait;
+    use BindingsTrait;
 
     private(set) array $values = [];
     private array $arguments = [];
@@ -45,8 +46,9 @@ class InsertStatement implements StatementProcessorInterface
     private function getQuote(): QuotesEnum
     {
         $quote = QuotesEnum::NONE;
-        if ($this->statementParts->metadata->quoteIdentifier) {
-            $quote = $this->statementParts->metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
+        $metadata = $this->statementParts->metadata ?? null;
+        if ($metadata?->quoteIdentifier) {
+            $quote = $metadata->quoteType ?? QuotesEnum::DOUBLE_QUOTE;
         }
         return $quote;
     }
@@ -168,27 +170,25 @@ class InsertStatement implements StatementProcessorInterface
 
     public function setValue(string $placeholder, mixed $value): InsertStatement
     {
-        if (!str_starts_with($placeholder, ':')) {
-            $placeholder = ':' . $placeholder;
-        }
+        $placeholder = $this->normalizePlaceholder($placeholder);
         $this->values[$placeholder] = $value;
         if (isset($this->params[$placeholder])) {
             $this->params[$placeholder]->setValue($value);
-            if ($this->params[$placeholder]->bindable) {
-                $this->bindings[$placeholder] = $this->params[$placeholder]->getValue();
-            }
+            $this->registerBinding($placeholder, $this->params[$placeholder]);
         }
         return $this;
     }
 
     public function getValue(string $placeholder): mixed
     {
-        return $this->values[$placeholder] ?? null;
+        return $this->values[$this->normalizePlaceholder($placeholder)] ?? null;
     }
 
     public function removeValue(string $placeholder): InsertStatement
     {
-        unset($this->values[$placeholder], $this->bindings[$placeholder]);
+        $placeholder = $this->normalizePlaceholder($placeholder);
+        unset($this->values[$placeholder]);
+        $this->removeExpandedBindings($placeholder);
         return $this;
     }
 
@@ -199,17 +199,18 @@ class InsertStatement implements StatementProcessorInterface
 
     public function hasValue(string $placeholder): bool
     {
-        return isset($this->values[$placeholder]);
+        return isset($this->values[$this->normalizePlaceholder($placeholder)]);
     }
 
     public function process(): InsertStatement
     {
+        // process() is called on every render; rebuild the lists to avoid duplicates.
+        $this->columns->clear();
+        $this->placeholders->clear();
+        $quote = $this->getQuote();
         foreach ($this->params as $param) {
-            // if (isset($this->values[$argument->placeholder]) || $argument->required === true) {
-            //$this->setValue($argument->placeholder, $this->values[$argument->placeholder] ?? $argument->defaultValue);
             if ($param->isValid()) {
-                //echo 'PARAM valid -> ', $param->paramName, ' -> ', $param->placeholder, ' = ', $param->getValue(), PHP_EOL;
-                $this->columns->add($param->columnExpression);
+                $this->columns->add($this->quoteIdentifier($param->columnExpression, $quote));
                 $this->placeholders->add($param->placeholder);
             }
         }
@@ -232,7 +233,7 @@ class InsertStatement implements StatementProcessorInterface
         $this->placeholders->prettyPrint = $this->prettyPrint;
 
         $insert = [Keywords::INSERT->value . ' ' . Keywords::INTO->value . ' ' . $this->quoteIdentifier(trim($this->table), $this->getQuote()), $this->columns];
-        if (!empty($this->params)) {
+        if ($this->placeholders->count() > 0) {
             $insert[] = Keywords::VALUES->value;
             $insert[] = $this->placeholders;
         } else if (isset($this->select)) {
@@ -250,7 +251,7 @@ class InsertStatement implements StatementProcessorInterface
 
     public function getParam(string $placeholder): ?Param
     {
-        return $this->params[$placeholder];
+        return $this->params[$this->normalizePlaceholder($placeholder)] ?? null;
     }
 
     public function getBindings(): array

@@ -20,7 +20,7 @@ This is a library package intended to be used from your PHP application. An exam
 - Language: PHP (>= 8.4)
 - Package manager: Composer
 - Type of project: PHP library (no framework)
-- Notable runtime extensions (required): `ext-zip`, `ext-fileinfo`,  `ext-dom`, `ext-simplexml`
+- Notable runtime extensions (required): `ext-zip`, `ext-fileinfo`, `ext-dom`, `ext-simplexml`, `ext-bcmath`
 - Optional extensions (suggested): `ext-redis`, `ext-memcached`
 
 #### Requirements
@@ -28,12 +28,13 @@ This is a library package intended to be used from your PHP application. An exam
 From `composer.json`:
 
 - PHP 8.4+
-- PHP extensions: zip, fileinfo, swoole>=6.0, dom, simplexml, pdo
+- PHP extensions: zip, fileinfo, dom, simplexml, bcmath
 - Optional for caching: redis or memcached
 
 Library dependencies (selected):
 
 - `xvii/satelles-utilis-proelio` (utilities, caching, config)
+- `xvii/satelles-nexus-utilis` (additional utilities, caching and configuration)
 
 Other dependencies (optionals):
 
