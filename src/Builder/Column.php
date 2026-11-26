@@ -265,8 +265,12 @@ class Column
         if (isset($this->subquery) && $this->subquery instanceof StatementProcessorInterface) {
             $colName = '(' . $this->subquery . ')';
         } else {
+            $isLiteral = (bool)($this->descriptor['literal'] ?? false);
+            $isQuotedLiteral = (bool)($this->descriptor['quoteliteral'] ?? false);
+            $legacyLiteralExpression = isset($this->descriptor['sqlexpression'])
+                && str_contains((string)$this->descriptor['sqlexpression'], 'literal');
             $columnParts = [];
-            if (isset($this->tableAlias) && (!isset($this->descriptor['sqlexpression']) || !str_contains($this->descriptor['sqlexpression'], 'literal'))) {
+            if (isset($this->tableAlias) && !$isLiteral && !$isQuotedLiteral && !$legacyLiteralExpression) {
                 if (is_array($this->tableAlias)) {
                     $columnParts = $this->tableAlias;
                 } else {
@@ -274,7 +278,9 @@ class Column
                 }
             }
             $columnParts[] = $this->descriptor['name'];
-            $colName = $this->quoteIdentifier(implode('.', $columnParts), $this->quote_identifier);
+            $colName = $isLiteral && !$isQuotedLiteral
+                ? (string)$this->descriptor['name']
+                : $this->quoteIdentifier(implode('.', $columnParts), $this->quote_identifier);
         }
         $this->columnName = $colName;
 

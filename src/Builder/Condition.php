@@ -30,7 +30,7 @@ class Condition
      */
     private(set) mixed $groupCondition;
     private(set) string $conditionId;
-    private ?SelectStatement $subquery;
+    private(set) ?SelectStatement $subquery;
 
     /**
      */
@@ -90,9 +90,18 @@ class Condition
             throw new ValueRequiredException(ExceptionDefinitions::CONDITION_WITHOUT_COLUMN_NAME->value);
         }
         $arguments = $this->arguments ?? [];
-        array_unshift($arguments, $this->columnExpression);
         if (isset($this->subquery)) {
-            $arguments[] = str_replace(':colname', $this->columnExpression, '(' . $this->subquery . ')');
+            $subquery = str_replace(':colname', $this->columnExpression, (string)$this->subquery);
+            if (in_array(strtolower($this->sqlexpression), ['exists', 'notexists'], true)) {
+                // EXISTS/NOT EXISTS are unary predicates: the column is only used
+                // to resolve :colname inside the subquery, never as an argument.
+                $arguments = [$subquery];
+            } else {
+                array_unshift($arguments, $this->columnExpression);
+                $arguments[] = '(' . $subquery . ')';
+            }
+        } else {
+            array_unshift($arguments, $this->columnExpression);
         }
         if (empty($arguments)) {
             throw new InvalidArgumentException(ExceptionDefinitions::CONDITION_WITHOUT_ARGUMENTS->value);

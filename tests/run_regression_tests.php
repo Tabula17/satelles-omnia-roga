@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
+use Tabula17\Satelles\Omnia\Roga\Builder\Column;
+use Tabula17\Satelles\Omnia\Roga\Builder\Condition;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expression;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expr\Andx;
 use Tabula17\Satelles\Omnia\Roga\Builder\Expr\OrderBy;
@@ -13,8 +15,11 @@ use Tabula17\Satelles\Omnia\Roga\Builder\QuotesEnum;
 use Tabula17\Satelles\Omnia\Roga\Builder\SelectStatement;
 use Tabula17\Satelles\Omnia\Roga\Collection\StatementCollection;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\DescriptorClasses;
+use Tabula17\Satelles\Omnia\Roga\Descriptor\ColumnDescriptor;
+use Tabula17\Satelles\Omnia\Roga\Descriptor\ConditionDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\ParamDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Descriptor\SelectDescriptor;
+use Tabula17\Satelles\Omnia\Roga\Descriptor\SubqueryDescriptor;
 use Tabula17\Satelles\Omnia\Roga\Exception\ConfigException;
 use Tabula17\Satelles\Omnia\Roga\Loader\XmlFile;
 use Tabula17\Satelles\Omnia\Roga\StatementBuilder;
@@ -164,6 +169,46 @@ $delete->loadStatementBy('allowed', 1);
 $delete->setValues(['filterIdParam' => 7]);
 checkSame(7, $delete->getValues()[':filterIdParam'] ?? null, 'DELETE normalizes placeholders', $failures);
 checkSame(false, str_contains($delete->getStatement() ?? '', 'HAVING'), 'DELETE has no HAVING clause', $failures);
+
+// 17. EXISTS/NOT EXISTS conditions keep the subquery instead of the column.
+$conditionSubquery = $loader->getStatementDescriptors('SELECT/Min')[0];
+foreach (['exists' => 'EXISTS(SELECT', 'notexists' => 'NOT EXISTS(SELECT'] as $sqlExpression => $prefix) {
+    $condition = new Condition(new ConditionDescriptor([
+        'sqlexpression' => $sqlExpression,
+        'subquery' => new SubqueryDescriptor(['descriptor' => $conditionSubquery, 'arguments' => []]),
+    ]), new Expression(), QuotesEnum::NONE);
+    $condition->setColumnExpression('t.c');
+    $conditionSql = (string)$condition;
+    check(str_starts_with($conditionSql, $prefix), "$sqlExpression keeps its subquery", $failures);
+    checkSame(false, str_contains($conditionSql, 'EXISTS(t.c)'), "$sqlExpression does not emit the column alone", $failures);
+    check($condition->subquery instanceof SelectStatement, "$sqlExpression exposes subquery to builders", $failures);
+}
+$equality = new Condition(new ConditionDescriptor([
+    'sqlexpression' => 'eq',
+    'subquery' => new SubqueryDescriptor(['descriptor' => $conditionSubquery, 'arguments' => []]),
+]), new Expression(), QuotesEnum::NONE);
+$equality->setColumnExpression('t.c');
+check(str_contains((string)$equality, 't.c = (SELECT'), 'Equality still wraps the subquery', $failures);
+
+// 18. literal/quoteliteral columns keep their expression and skip the table alias.
+$literalColumn = new Column(
+    new ColumnDescriptor(['name' => '1 + 1', 'tableAlias' => 't', 'literal' => 1]),
+    new Expression(),
+    QuotesEnum::DOUBLE_QUOTE
+);
+checkSame('1 + 1', (string)$literalColumn, 'literal column is not quoted', $failures);
+$quotedLiteralColumn = new Column(
+    new ColumnDescriptor(['name' => 'col literal', 'tableAlias' => 't', 'quoteliteral' => true]),
+    new Expression(),
+    QuotesEnum::DOUBLE_QUOTE
+);
+checkSame('"col literal"', (string)$quotedLiteralColumn, 'quoteliteral column is quoted without alias', $failures);
+$normalColumn = new Column(
+    new ColumnDescriptor(['name' => 'c', 'tableAlias' => 't']),
+    new Expression(),
+    QuotesEnum::DOUBLE_QUOTE
+);
+checkSame('"t"."c"', (string)$normalColumn, 'regular columns still include the alias', $failures);
 
 if ($failures === []) {
     echo "ALL REGRESSION TESTS PASSED\n";
