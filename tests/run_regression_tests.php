@@ -247,6 +247,26 @@ $unionRequired = array_map(static fn(Param $param): string => $param->placeholde
 check(in_array(':param_x', $unionRequired, true), 'Required UNION parameter survives merge', $failures);
 checkSame(':param_x', $union->getParam(':param_x')?->placeholder, 'UNION exposes the merged parameter', $failures);
 
+// 21. The XML used as the documented tag reference must stay executable.
+$tagsBuilder = new StatementBuilder('SELECT/Tags', $loader);
+$tagsBuilder->loadStatementBy('allowed', 1);
+$tagsSql = (string)$tagsBuilder->getStatement();
+check(str_contains($tagsSql, 'NOW() AS "ahora"'), 'literal column renders raw SQL', $failures);
+check(str_contains($tagsSql, 'CAST("t"."fecha" AS DATE)'), 'column template is expanded', $failures);
+check(str_contains($tagsSql, 'GROUP BY "t"."id"'), 'grouped column is emitted', $failures);
+check(str_ends_with($tagsSql, 'FOR SHARE SKIP LOCKED'), 'documented lock modifiers are emitted', $failures);
+
+$tagsBuilder->setValues(['estado' => 'ACT', 'ids' => [1, 2]]);
+$tagsSql = (string)$tagsBuilder->getStatement();
+check(str_contains($tagsSql, '"t"."estado" = :estado'), 'documented parameter is bound', $failures);
+check(str_contains($tagsSql, 'IN(:ids0, :ids1)'), 'array parameter is expanded', $failures);
+checkSame(
+    [':estado' => 'ACT', ':ids0' => 1, ':ids1' => 2],
+    $tagsBuilder->getBindings(),
+    'documented bindings match the rendered placeholders',
+    $failures
+);
+
 if ($failures === []) {
     echo "ALL REGRESSION TESTS PASSED\n";
     exit(0);
